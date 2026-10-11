@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Build Output
+dist/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Prisma Local Database & Migrations data (if using SQLite locally, though PostgreSQL is used)
+# Uncomment if needed for local dev artifacts
+# dev.db
+# dev.db-journal
+
+# Uploads / Local Media Storage (Since you are using Cloudinary, local uploads folder should be ignored)
+uploads/
+temp/
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# OS & Editor Specific Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Testing & Coverage
+coverage/
+.nyc_output/
