@@ -1,0 +1,14 @@
+// Approved organization slogans and campaign copy.
+model Slogan {
+  id             String        @id @default(uuid())
+  organizationId String?
+  text           String
+  occasion       String?
+  tone           String?
+  language       String        @default("bn")
+  isApproved     Boolean       @default(false)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId, isApproved])
+}
