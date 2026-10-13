@@ -10,6 +10,7 @@ async function startServer(): Promise<void> {
     app.listen(port, () => {
       console.log(`Server is running at http://localhost:${port}`);
     });
+   
   } catch (error) {
     console.error("Server startup failed:", error);
     process.exit(1);
