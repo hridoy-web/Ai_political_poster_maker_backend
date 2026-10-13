@@ -1,0 +1,29 @@
+// Object-storage asset metadata and relations.
+model Asset {
+  id             String       @id @default(uuid())
+  ownerUserId    String?
+  guestSessionId String?
+  purpose        AssetPurpose
+  storageKey     String       @unique
+  mimeType       String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  checksum       String?
+  expiresAt      DateTime?
+  deletedAt      DateTime?
+
+  owner             User?               @relation("UserAssets", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  guestSession      GuestSession?       @relation("GuestAssets", fields: [guestSessionId], references: [id], onDelete: Cascade)
+  avatarOf          User?               @relation("UserAvatar")
+  organizationLogos Organization[]      @relation("OrganizationLogo")
+  templatePreviews  Template[]          @relation("TemplatePreview")
+  posterSourceItems PosterSourceAsset[]
+  posterOutputs     Poster[]            @relation("PosterOutput")
+  posterPreviews    Poster[]            @relation("PosterPreview")
+  createdAt         DateTime            @default(now())
+
+  @@index([ownerUserId, createdAt])
+  @@index([guestSessionId, createdAt])
+  @@index([purpose, expiresAt])
+}

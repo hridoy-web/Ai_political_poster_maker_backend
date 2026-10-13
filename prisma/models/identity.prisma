@@ -1,0 +1,63 @@
+// User accounts and political organizations.
+model User {
+  id           String        @id @default(uuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  status       AccountStatus @default(ACTIVE)
+
+  title         String?
+  area          String?
+  avatarAssetId String? @unique
+  avatar        Asset?  @relation("UserAvatar", fields: [avatarAssetId], references: [id], onDelete: SetNull)
+
+  roles                UserRole[]
+  memberships          OrganizationMembership[] @relation("MembershipApplicant")
+  reviewedMemberships  OrganizationMembership[] @relation("MembershipReviewer")
+  claimedGuestSessions GuestSession[]           @relation("GuestClaim")
+  posters              Poster[]
+  bookmarks            Bookmark[]
+  assets               Asset[]                  @relation("UserAssets")
+  wallet               Wallet?
+  moneyLedgerEntries   MoneyLedgerEntry[]
+  creditLedgerEntries  CreditLedgerEntry[]
+  payments             Payment[]
+  subscriptions        Subscription[]
+  aiTasks              AiTask[]                 @relation("UserAiTasks")
+  auditLogs            AuditLog[]               @relation("AuditActor")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model Organization {
+  id          String                   @id @default(uuid())
+  name        String
+  slug        String                   @unique
+  logoAssetId String?
+  logo        Asset?                   @relation("OrganizationLogo", fields: [logoAssetId], references: [id], onDelete: SetNull)
+  memberships OrganizationMembership[]
+  templates   Template[]
+  slogans     Slogan[]
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+}
+
+model OrganizationMembership {
+  id             String           @id @default(uuid())
+  userId         String
+  organizationId String
+  status         MembershipStatus @default(PENDING)
+  joinedAt       DateTime?
+  reviewedAt     DateTime?
+  reviewedById   String?
+
+  user         User         @relation("MembershipApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy   User?        @relation("MembershipReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId, status])
+}

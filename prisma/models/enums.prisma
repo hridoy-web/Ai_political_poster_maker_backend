@@ -1,0 +1,85 @@
+// Shared enums used across the application models.
+enum AccountStatus {
+  ACTIVE
+  BLOCKED
+  DELETED
+}
+
+enum MembershipStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  LEFT
+}
+
+enum TemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AccessLevel {
+  FREE
+  PREMIUM
+}
+
+enum PosterStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  DELETED
+}
+
+enum AssetPurpose {
+  USER_UPLOAD
+  GENERATED_BACKGROUND
+  POSTER_OUTPUT
+  TEMPLATE_PREVIEW
+  TEMPLATE_ASSET
+  LOGO
+}
+
+enum MoneyEntryType {
+  RECHARGE
+  POSTER_DEBIT
+  REFUND
+  ADJUSTMENT
+}
+
+enum CreditEntryType {
+  PACKAGE_CREDIT
+  BONUS_CREDIT
+  POSTER_DEBIT
+  REFUND
+  ADJUSTMENT
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+enum AiTaskType {
+  CAPTION_SUGGESTION
+  BACKGROUND_GENERATION
+  BACKGROUND_REMOVAL
+  IMAGE_RESHAPE
+}
+
+enum AiTaskStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
