@@ -13,8 +13,7 @@ export const prisma = new PrismaClient({ adapter });
 
 const connectDB = async (): Promise<void> => {
   await prisma.$connect();
-  await prisma.$queryRaw`SELECT 1`;
-  console.log("PostgreSQL connected and query successful.");
+  console.log("PostgreSQL connected successfully.");
 };
 
 export default connectDB;
