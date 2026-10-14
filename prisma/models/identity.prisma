@@ -19,6 +19,7 @@ model User {
   bookmarks            Bookmark[]
   assets               Asset[]                  @relation("UserAssets")
   wallet               Wallet?
+  creditWallet         CreditWallet?
   moneyLedgerEntries   MoneyLedgerEntry[]
   creditLedgerEntries  CreditLedgerEntry[]
   payments             Payment[]
