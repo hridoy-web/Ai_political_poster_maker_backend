@@ -59,3 +59,5 @@ model PosterSourceAsset {
   @@id([posterId, assetId])
   @@unique([posterId, position])
 }
+
+
