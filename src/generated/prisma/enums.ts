@@ -9,7 +9,122 @@
 * 🟢 You can import this file directly.
 */
 
+export const AccountStatus = {
+  ACTIVE: 'ACTIVE',
+  BLOCKED: 'BLOCKED',
+  DELETED: 'DELETED'
+} as const
+
+export type AccountStatus = (typeof AccountStatus)[keyof typeof AccountStatus]
 
 
-// This file is empty because there are no enums in the schema.
-export {}
+export const MembershipStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  LEFT: 'LEFT'
+} as const
+
+export type MembershipStatus = (typeof MembershipStatus)[keyof typeof MembershipStatus]
+
+
+export const TemplateStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED'
+} as const
+
+export type TemplateStatus = (typeof TemplateStatus)[keyof typeof TemplateStatus]
+
+
+export const AccessLevel = {
+  FREE: 'FREE',
+  PREMIUM: 'PREMIUM'
+} as const
+
+export type AccessLevel = (typeof AccessLevel)[keyof typeof AccessLevel]
+
+
+export const PosterStatus = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  DELETED: 'DELETED'
+} as const
+
+export type PosterStatus = (typeof PosterStatus)[keyof typeof PosterStatus]
+
+
+export const AssetPurpose = {
+  USER_UPLOAD: 'USER_UPLOAD',
+  GENERATED_BACKGROUND: 'GENERATED_BACKGROUND',
+  POSTER_OUTPUT: 'POSTER_OUTPUT',
+  TEMPLATE_PREVIEW: 'TEMPLATE_PREVIEW',
+  TEMPLATE_ASSET: 'TEMPLATE_ASSET',
+  LOGO: 'LOGO'
+} as const
+
+export type AssetPurpose = (typeof AssetPurpose)[keyof typeof AssetPurpose]
+
+
+export const MoneyEntryType = {
+  RECHARGE: 'RECHARGE',
+  POSTER_DEBIT: 'POSTER_DEBIT',
+  REFUND: 'REFUND',
+  ADJUSTMENT: 'ADJUSTMENT'
+} as const
+
+export type MoneyEntryType = (typeof MoneyEntryType)[keyof typeof MoneyEntryType]
+
+
+export const CreditEntryType = {
+  PACKAGE_CREDIT: 'PACKAGE_CREDIT',
+  BONUS_CREDIT: 'BONUS_CREDIT',
+  POSTER_DEBIT: 'POSTER_DEBIT',
+  REFUND: 'REFUND',
+  ADJUSTMENT: 'ADJUSTMENT'
+} as const
+
+export type CreditEntryType = (typeof CreditEntryType)[keyof typeof CreditEntryType]
+
+
+export const PaymentStatus = {
+  PENDING: 'PENDING',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED',
+  REFUNDED: 'REFUNDED'
+} as const
+
+export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus]
+
+
+export const SubscriptionStatus = {
+  PENDING: 'PENDING',
+  ACTIVE: 'ACTIVE',
+  EXPIRED: 'EXPIRED',
+  CANCELLED: 'CANCELLED',
+  FAILED: 'FAILED'
+} as const
+
+export type SubscriptionStatus = (typeof SubscriptionStatus)[keyof typeof SubscriptionStatus]
+
+
+export const AiTaskType = {
+  CAPTION_SUGGESTION: 'CAPTION_SUGGESTION',
+  BACKGROUND_GENERATION: 'BACKGROUND_GENERATION',
+  BACKGROUND_REMOVAL: 'BACKGROUND_REMOVAL',
+  IMAGE_RESHAPE: 'IMAGE_RESHAPE'
+} as const
+
+export type AiTaskType = (typeof AiTaskType)[keyof typeof AiTaskType]
+
+
+export const AiTaskStatus = {
+  PENDING: 'PENDING',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED: 'FAILED'
+} as const
+
+export type AiTaskStatus = (typeof AiTaskStatus)[keyof typeof AiTaskStatus]

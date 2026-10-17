@@ -17,4 +17,128 @@ import * as Prisma from './internal/prismaNamespaceBrowser.js'
 export { Prisma }
 export * as $Enums from './enums.js'
 export * from './enums.js';
-
+/**
+ * Model AiTask
+ * 
+ */
+export type AiTask = Prisma.AiTaskModel
+/**
+ * Model Asset
+ * 
+ */
+export type Asset = Prisma.AssetModel
+/**
+ * Model AuditLog
+ * 
+ */
+export type AuditLog = Prisma.AuditLogModel
+/**
+ * Model Wallet
+ * 
+ */
+export type Wallet = Prisma.WalletModel
+/**
+ * Model CreditWallet
+ * 
+ */
+export type CreditWallet = Prisma.CreditWalletModel
+/**
+ * Model MoneyLedgerEntry
+ * 
+ */
+export type MoneyLedgerEntry = Prisma.MoneyLedgerEntryModel
+/**
+ * Model CreditLedgerEntry
+ * 
+ */
+export type CreditLedgerEntry = Prisma.CreditLedgerEntryModel
+/**
+ * Model Package
+ * 
+ */
+export type Package = Prisma.PackageModel
+/**
+ * Model Subscription
+ * 
+ */
+export type Subscription = Prisma.SubscriptionModel
+/**
+ * Model Payment
+ * 
+ */
+export type Payment = Prisma.PaymentModel
+/**
+ * Model PaymentWebhookEvent
+ * 
+ */
+export type PaymentWebhookEvent = Prisma.PaymentWebhookEventModel
+/**
+ * Model Slogan
+ * 
+ */
+export type Slogan = Prisma.SloganModel
+/**
+ * Model User
+ * 
+ */
+export type User = Prisma.UserModel
+/**
+ * Model Organization
+ * 
+ */
+export type Organization = Prisma.OrganizationModel
+/**
+ * Model OrganizationMembership
+ * 
+ */
+export type OrganizationMembership = Prisma.OrganizationMembershipModel
+/**
+ * Model GuestSession
+ * 
+ */
+export type GuestSession = Prisma.GuestSessionModel
+/**
+ * Model Poster
+ * 
+ */
+export type Poster = Prisma.PosterModel
+/**
+ * Model PosterSourceAsset
+ * 
+ */
+export type PosterSourceAsset = Prisma.PosterSourceAssetModel
+/**
+ * Model Role
+ * 
+ */
+export type Role = Prisma.RoleModel
+/**
+ * Model Permission
+ * 
+ */
+export type Permission = Prisma.PermissionModel
+/**
+ * Model UserRole
+ * 
+ */
+export type UserRole = Prisma.UserRoleModel
+/**
+ * Model RolePermission
+ * 
+ */
+export type RolePermission = Prisma.RolePermissionModel
+/**
+ * Model TemplateCategory
+ * 
+ */
+export type TemplateCategory = Prisma.TemplateCategoryModel
+/**
+ * Model Template
+ * 
+ */
+export type Template = Prisma.TemplateModel
+/**
+ * Model Bookmark
+ * 
+ */
+export type Bookmark = Prisma.BookmarkModel
