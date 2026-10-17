@@ -3,7 +3,7 @@ model User {
   id           String        @id @default(uuid())
   name         String
   email        String        @unique
-  passwordHash String
+  password String
   status       AccountStatus @default(ACTIVE)
 
   title         String?
