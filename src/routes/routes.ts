@@ -1,13 +1,12 @@
 import { Router } from "express";
 import uploadRoutes from "../modules/upload/upload.route.js";
-import authRoutes from "../modules/auth/auth.route.js";
-import { getCurrentUser } from "../modules/user/user.controller.js";
-import { verifyToken } from "../middlewares/auth.middleware.js";
+import { CategoryRoutes } from "../modules/category/category.routes.js";
+import { TemplateRoutes } from "../modules/template/template.routes.js";
 
 const router = Router();
 
 router.use("/uploads", uploadRoutes);
-router.use("/auth", authRoutes);
-router.use("/me", verifyToken, getCurrentUser);
+router.use("/category", CategoryRoutes);
+router.use("/template", TemplateRoutes);
 
 export default router;
