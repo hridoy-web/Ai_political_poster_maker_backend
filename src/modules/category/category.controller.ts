@@ -1,4 +1,8 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
+import { ZodIssue } from "zod";
+import { asyncHandler } from "../../utils/asyncHandler.js";
+import { ApiError } from "../../utils/ApiError.js";
+import sendResponse from "../../utils/sendResponse.js";
 import { categoryService } from "./category.service.js";
 import {
   createCategorySchema,
@@ -6,84 +10,90 @@ import {
   updateCategoryStatusSchema,
 } from "./category.validation.js";
 
-type HttpError = Error & { statusCode?: number };
-
-const badRequest = (message: string): HttpError => {
-  const error = new Error(message) as HttpError;
-  error.statusCode = 400;
-  return error;
-};
-
-const formatIssues = (issues: { path: PropertyKey[]; message: string }[]) =>
+// Zod error 
+const formatIssues = (issues: ZodIssue[]) =>
   issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
 
-const createCategory = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const parsed = createCategorySchema.safeParse(req.body);
-    if (!parsed.success) {
-      return next(badRequest(formatIssues(parsed.error.issues)));
-    }
-
-    const data = await categoryService.createCategory(parsed.data);
-    res.status(201).json({ success: true, data });
-  } catch (err) {
-    console.error(err);
-    next(err);
+// createCategory
+const createCategory = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = createCategorySchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, formatIssues(parsed.error.issues));
   }
-};
 
-const listCategories = async (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    const data = await categoryService.listCategories(false);
-    res.json({ success: true, data });
-  } catch (err) {
-    console.error(err);
-    next(err);
+  const result = await categoryService.createCategory(parsed.data);
+
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: "Category created successfully",
+    data: result,
+  });
+});
+
+
+const listCategories = asyncHandler(async (_req: Request, res: Response) => {
+  const result = await categoryService.listCategories(false);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Categories fetched successfully",
+    data: result,
+  });
+});
+
+
+const listAllCategories = asyncHandler(async (_req: Request, res: Response) => {
+  const result = await categoryService.listCategories(true);
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "All categories fetched successfully",
+    data: result,
+  });
+});
+
+// updated category
+const updateCategory = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = updateCategorySchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, formatIssues(parsed.error.issues));
   }
-};
 
-const listAllCategories = async (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    const data = await categoryService.listCategories(true);
-    res.json({ success: true, data });
-  } catch (err) {
-    console.error(err);
-    next(err);
+  const result = await categoryService.updateCategory(
+    req.params.id as string,
+    parsed.data
+  );
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Category updated successfully",
+    data: result,
+  });
+});
+
+// category status
+const setCategoryStatus = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = updateCategoryStatusSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, "isActive must be true or false");
   }
-};
 
-const updateCategory = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const parsed = updateCategorySchema.safeParse(req.body);
-    if (!parsed.success) {
-      return next(badRequest(formatIssues(parsed.error.issues)));
-    }
+  const result = await categoryService.setCategoryStatus(
+    req.params.id as string,
+    parsed.data.isActive
+  );
 
-    const data = await categoryService.updateCategory(req.params.id as string, parsed.data);
-    res.json({ success: true, data });
-  } catch (err) {
-    console.error(err);
-    next(err);
-  }
-};
-
-const setCategoryStatus = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const parsed = updateCategoryStatusSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return next(badRequest("isActive must be true or false"));
-    }
-
-    const data = await categoryService.setCategoryStatus(
-      req.params.id as string,
-      parsed.data.isActive
-    );
-    res.json({ success: true, data });
-  } catch (err) {
-    console.error(err);
-    next(err);
-  }
-};
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Category status updated successfully",
+    data: result,
+  });
+});
 
 export const categoryController = {
   createCategory,

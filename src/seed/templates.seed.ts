@@ -1,97 +1,85 @@
-import { prisma } from "../lib/prisma.js";
-import { cleanTemplateHtml, cleanTemplateCss } from "../lib/sanitizeHtml.js";
-import { configSchema } from "../modules/template/template.validation.js";
-import type { ITheme } from "../modules/template/template.interface.js";
+import { PrismaClient } from "@prisma/client";
 
-const baseCss = `
-.poster { position: relative; width: 1080px; height: 1350px; overflow: hidden; font-family: sans-serif; }
-.layer { position: absolute; }
-.bg { top: 0; left: 0; width: 1080px; height: 1350px; }
-.title { top: 120px; left: 80px; width: 920px; font-size: 80px; font-weight: bold; text-align: center; }
-.subtitle { top: 260px; left: 80px; width: 920px; font-size: 40px; text-align: center; }
-.photo { top: 400px; left: 290px; width: 500px; height: 500px; border-radius: 50%; }
-.footer { top: 1150px; left: 80px; width: 920px; font-size: 44px; text-align: center; }
-`;
+const prisma = new PrismaClient();
 
+async function main() {
+  console.log("🌱 Seeding Categories and Templates...");
 
+  const politicalCategory = await prisma.templateCategory.upsert({
+    where: { slug: "political-posters" },
+    update: {},
+    create: {
+      name: "রাজনৈতিক পোস্টার",
+      slug: "political-posters",
+      sortOrder: 1,
+      isActive: true,
+    },
+  });
 
-const themes: ITheme[] = [
-  { title: "Birthday Classic", category: { name: "Birthday", slug: "birthday", sortOrder: 1 }, accessLevel: "FREE", bg: "#fff3e0", titleColor: "#e65100", textColor: "#333333", defaultTitle: "Happy Birthday", defaultSubtitle: "Best wishes", withPhoto: true },
-  { title: "Birthday Blue", category: { name: "Birthday", slug: "birthday", sortOrder: 1 }, accessLevel: "PREMIUM", bg: "#e3f2fd", titleColor: "#0d47a1", textColor: "#1a237e", defaultTitle: "Happy Birthday", defaultSubtitle: "Many happy returns", withPhoto: true },
-  { title: "Birthday Pink", category: { name: "Birthday", slug: "birthday", sortOrder: 1 }, accessLevel: "FREE", bg: "#fce4ec", titleColor: "#c2185b", textColor: "#4a148c", defaultTitle: "Happy Birthday", defaultSubtitle: "Celebrate today", withPhoto: false },
-  { title: "Eid Mubarak Green", category: { name: "Eid", slug: "eid", sortOrder: 2 }, accessLevel: "FREE", bg: "#e8f5e9", titleColor: "#1b5e20", textColor: "#2e7d32", defaultTitle: "Eid Mubarak", defaultSubtitle: "Wishing you joy and peace", withPhoto: true },
-  { title: "Eid Mubarak Gold", category: { name: "Eid", slug: "eid", sortOrder: 2 }, accessLevel: "PREMIUM", bg: "#fffde7", titleColor: "#f57f17", textColor: "#4e342e", defaultTitle: "Eid Mubarak", defaultSubtitle: "Blessed Eid to you", withPhoto: false },
-  { title: "Election Campaign Red", category: { name: "Election", slug: "election", sortOrder: 3 }, accessLevel: "FREE", bg: "#ffebee", titleColor: "#b71c1c", textColor: "#212121", defaultTitle: "Vote for Change", defaultSubtitle: "Your vote, your future", withPhoto: true },
-  { title: "Election Campaign Green", category: { name: "Election", slug: "election", sortOrder: 3 }, accessLevel: "PREMIUM", bg: "#e8f5e9", titleColor: "#006a4e", textColor: "#212121", defaultTitle: "Vote for Progress", defaultSubtitle: "Together we build", withPhoto: true },
-  { title: "Rally Announcement", category: { name: "Rally", slug: "rally", sortOrder: 4 }, accessLevel: "FREE", bg: "#e8eaf6", titleColor: "#1a237e", textColor: "#212121", defaultTitle: "Join Our Rally", defaultSubtitle: "Date, time and venue", withPhoto: false },
-  { title: "Independence Day", category: { name: "National Day", slug: "national-day", sortOrder: 5 }, accessLevel: "FREE", bg: "#e8f5e9", titleColor: "#006a4e", textColor: "#b71c1c", defaultTitle: "Happy Independence Day", defaultSubtitle: "Proud of our nation", withPhoto: false },
-  { title: "Victory Day", category: { name: "National Day", slug: "national-day", sortOrder: 5 }, accessLevel: "PREMIUM", bg: "#fbe9e7", titleColor: "#bf360c", textColor: "#212121", defaultTitle: "Happy Victory Day", defaultSubtitle: "Remembering the heroes", withPhoto: true },
-  { title: "Thank You Voters", category: { name: "Election", slug: "election", sortOrder: 3 }, accessLevel: "FREE", bg: "#f3e5f5", titleColor: "#6a1b9a", textColor: "#212121", defaultTitle: "Thank You", defaultSubtitle: "For your trust and support", withPhoto: true },
-  { title: "Condolence Message", category: { name: "Condolence", slug: "condolence", sortOrder: 6 }, accessLevel: "FREE", bg: "#eceff1", titleColor: "#263238", textColor: "#37474f", defaultTitle: "Deepest Condolences", defaultSubtitle: "Our thoughts are with you", withPhoto: true },
-];
+  console.log(`✅ Category ready: ${politicalCategory.name}`);
 
-const buildTemplate = (t: ITheme) => {
-  const html = `<div class="poster">
-  <div class="layer bg" style="background:${t.bg}"></div>
-  <div class="layer title" style="color:${t.titleColor}">{{title}}</div>
-  <div class="layer subtitle" style="color:${t.textColor}">{{subtitle}}</div>${
-    t.withPhoto ? `\n  <img class="layer photo" data-field="photo" alt="" />` : ""
-  }
-  <div class="layer footer" style="color:${t.textColor}">{{name}}</div>
-</div>`;
+  // dynamic HTML ও Config 
+  const electionTemplateConfig = {
+    html: `
+      <div style="width: 1080px; height: 1350px; background: linear-gradient(180deg, #0b6623 0%, #000000 100%); color: #ffffff; font-family: Arial, sans-serif; position: relative; box-sizing: border-box; padding: 40px;">
+        <div style="text-align: center; border-bottom: 3px solid #f1c40f; padding-bottom: 20px;">
+          <h1 style="font-size: 50px; color: #f1c40f; margin: 0;">{{election_slogan}}</h1>
+        </div>
+        
+        <div style="display: flex; justify-content: center; margin-top: 40px;">
+          <img src="{{leader_image_url}}" style="width: 350px; height: 350px; border-radius: 50%; border: 6px solid #ffffff; object-fit: cover;" alt="Leader" />
+        </div>
 
-  const fields = [
-    { key: "title", type: "text" as const, label: "Title", default: t.defaultTitle },
-    { key: "subtitle", type: "text" as const, label: "Subtitle", default: t.defaultSubtitle },
-    ...(t.withPhoto ? [{ key: "photo", type: "image" as const, label: "Photo" }] : []),
-    { key: "name", type: "text" as const, label: "Name", default: "Your Name" },
-  ];
+        <div style="text-align: center; margin-top: 20px;">
+          <h2 style="font-size: 42px; margin: 5px 0;">{{leader_name}}</h2>
+          <p style="font-size: 24px; color: #e0e0e0; margin: 0;">{{leader_title}}</p>
+        </div>
 
-  return { type: "html" as const, html, css: baseCss, fields };
-};
+        <div style="position: absolute; bottom: 50px; left: 40px; right: 40px; background: rgba(255,255,255,0.1); padding: 25px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <h3 style="font-size: 32px; margin: 0; color: #f1c40f;">{{candidate_name}}</h3>
+            <p style="font-size: 22px; margin: 5px 0 0 0;">{{designation}}</p>
+          </div>
+          <div style="font-size: 26px; font-weight: bold; background: #e74c3c; padding: 10px 20px; border-radius: 8px;">
+            মার্কা: {{party_symbol}}
+          </div>
+        </div>
+      </div>
+    `,
+    placeholders: [
+      { key: "election_slogan", label: "নির্বাচনী স্লোগান", defaultValue: "উন্নয়নের মার্কা ভোট দিন" },
+      { key: "leader_image_url", label: "নেতার ছবি", defaultValue: "https://via.placeholder.com/350" },
+      { key: "leader_name", label: "শীর্ষ নেতার নাম", defaultValue: "জননেতা জনাব..." },
+      { key: "leader_title", label: "নেতার পদবি", defaultValue: "মাননীয় সংসদ সদস্য" },
+      { key: "candidate_name", label: "প্রার্থীর নাম", defaultValue: "মো: আপনার নাম" },
+      { key: "designation", label: "পদবি", defaultValue: "সাধারণ সম্পাদক পদপ্রার্থী" },
+      { key: "party_symbol", label: "নির্বাচনী প্রতীক", defaultValue: "নৌকা / ধানের শীষ / লাঙ্গল" }
+    ]
+  };
 
-const main = async () => {
-  const categoryIds = new Map<string, string>();
+  // template database insert
+  const template = await prisma.template.create({
+    data: {
+      title: "নির্বাচনী প্রচারণার পোস্টার - ৪:৫",
+      description: "জাতীয় ও স্থানীয় নির্বাচনের জন্য কাস্টমাইজেবল রাজনৈতিক পোস্টার।",
+      categoryId: politicalCategory.id,
+      aspectRatio: "4:5",
+      width: 1080,
+      height: 1350,
+      status: "PUBLISHED",      
+      accessLevel: "FREE",      
+      config: electionTemplateConfig,
+    },
+  });
 
-  for (const t of themes) {
-    // category 
-    let categoryId = categoryIds.get(t.category.slug);
-    if (!categoryId) {
-      const category = await prisma.templateCategory.upsert({
-        where: { slug: t.category.slug },
-        update: {},
-        create: t.category,
-      });
-      categoryId = category.id;
-      categoryIds.set(t.category.slug, categoryId);
-    }
-
-    const parsed = configSchema.parse(buildTemplate(t));
-    const config = {
-      ...parsed,
-      html: cleanTemplateHtml(parsed.html),
-      css: cleanTemplateCss(parsed.css),
-    };
-
-    const existing = await prisma.template.findFirst({
-      where: { title: t.title, categoryId },
-    });
-
-    if (existing) {
-      await prisma.template.update({ where: { id: existing.id }, data: { config } });
-      console.log("Updated:", t.title);
-    } else {
-      await prisma.template.create({
-        data: { title: t.title, categoryId, accessLevel: t.accessLevel, status: "PUBLISHED", config },
-      });
-      console.log("Created:", t.title);
-    }
-  }
-};
+  console.log(`✅ Template created: ${template.title} (ID: ${template.id})`);
+}
 
 main()
-  .catch((err) => {
-    console.error(err);
-    process.exitCode = 1;
+  .catch((e) => {
+    console.error("❌ Seeding failed:", e);
+    process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
