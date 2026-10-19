@@ -1,0 +1,63 @@
+// Guest sessions and poster generation history.
+model GuestSession {
+  id                String    @id @default(uuid())
+  // Store a hash of the server-issued guest token, not the raw token.
+  tokenHash         String    @unique
+  successfulPosters Int       @default(0)
+  expiresAt         DateTime
+  userId            String?
+  claimedAt         DateTime?
+
+  user      User?    @relation("GuestClaim", fields: [userId], references: [id], onDelete: SetNull)
+  assets    Asset[]  @relation("GuestAssets")
+  posters   Poster[]
+  aiTasks   AiTask[] @relation("GuestAiTasks")
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+model Poster {
+  id             String       @id @default(uuid())
+  userId         String?
+  guestSessionId String?
+  templateId     String?
+  status         PosterStatus @default(PENDING)
+
+  // Snapshot validated render input so poster history remains understandable.
+  inputData       Json
+  rendererVersion String?
+  outputAssetId   String?
+  previewAssetId  String?
+  errorCode       String?
+  errorMessage    String?
+  idempotencyKey  String  @unique
+
+  user         User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestSession GuestSession?       @relation(fields: [guestSessionId], references: [id], onDelete: SetNull)
+  template     Template?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  output       Asset?              @relation("PosterOutput", fields: [outputAssetId], references: [id], onDelete: SetNull)
+  preview      Asset?              @relation("PosterPreview", fields: [previewAssetId], references: [id], onDelete: SetNull)
+  sourceAssets PosterSourceAsset[]
+  createdAt    DateTime            @default(now())
+  completedAt  DateTime?
+  deletedAt    DateTime?
+
+  @@index([userId, createdAt])
+  @@index([guestSessionId, createdAt])
+  @@index([status, createdAt])
+}
+
+model PosterSourceAsset {
+  posterId String
+  assetId  String
+  position Int
+  poster   Poster @relation(fields: [posterId], references: [id], onDelete: Cascade)
+  asset    Asset  @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([posterId, assetId])
+  @@unique([posterId, position])
+}
+
+

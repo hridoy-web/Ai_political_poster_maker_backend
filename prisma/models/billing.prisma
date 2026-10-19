@@ -1,0 +1,147 @@
+// Wallet, separate money/credit ledgers, packages, and payments.
+model Wallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Decimal  @default(0) @db.Decimal(12, 2)
+  currency  String   @default("BDT")
+  updatedAt DateTime @updatedAt
+}
+
+// Current credit balance snapshot.
+// Update this and CreditLedgerEntry in the same database transaction.
+model CreditWallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model MoneyLedgerEntry {
+  id             String         @id @default(uuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type           MoneyEntryType
+  amount         Decimal        @db.Decimal(12, 2) // Positive = money added; negative = money deducted.
+  currency       String         @default("BDT")
+  balanceAfter   Decimal        @db.Decimal(12, 2)
+  idempotencyKey String
+  createdAt      DateTime       @default(now())
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+}
+
+model CreditLedgerEntry {
+  id             String          @id @default(uuid())
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type           CreditEntryType
+  amount         Int // Positive = credits added; negative = credits used.
+  balanceAfter   Int
+  expiresAt      DateTime?
+  idempotencyKey String
+  createdAt      DateTime        @default(now())
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@index([userId, expiresAt])
+}
+
+model Package {
+  id                String         @id @default(uuid())
+  code              String         @unique
+  name              String
+  description       String?
+  price             Decimal        @db.Decimal(12, 2)
+  currency          String         @default("BDT")
+  durationDays      Int?
+  posterCredits     Int            @default(0)
+  bonusCredits      Int            @default(0)
+  aiCaptionLimit    Int            @default(0)
+  aiBackgroundLimit Int            @default(0)
+  premiumAccess     Boolean        @default(false)
+  // Increment when published terms change. Existing subscriptions keep their snapshots.
+  version           Int            @default(1)
+  isPublished       Boolean        @default(false)
+  effectiveFrom     DateTime?
+  effectiveUntil    DateTime?
+  subscriptions     Subscription[]
+  payments          Payment[]
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([isPublished, effectiveFrom, effectiveUntil])
+}
+
+model Subscription {
+  id          String             @id @default(uuid())
+  userId      String
+  packageId   String
+  status      SubscriptionStatus @default(PENDING)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  cancelledAt DateTime?
+
+  // Purchase-time package snapshot. Later Package edits do not change this subscription.
+  packageCodeAtPurchase       String
+  packageNameAtPurchase       String
+  packageVersionAtPurchase    Int
+  priceAtPurchase             Decimal @db.Decimal(12, 2)
+  currencyAtPurchase          String
+  durationDaysAtPurchase      Int?
+  posterCreditsAtPurchase     Int
+  bonusCreditsAtPurchase      Int
+  aiCaptionLimitAtPurchase    Int
+  aiBackgroundLimitAtPurchase Int
+  premiumAccessAtPurchase     Boolean
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  package   Package   @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  payments  Payment[]
+  createdAt DateTime  @default(now())
+
+  @@index([userId, status, endsAt])
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  userId            String
+  packageId         String?
+  subscriptionId    String?
+  provider          String
+  providerReference String?
+  amount            Decimal       @db.Decimal(12, 2)
+  currency          String        @default("BDT")
+  status            PaymentStatus @default(PENDING)
+  idempotencyKey    String        @unique
+  verifiedAt        DateTime?
+  metadata          Json?
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  package       Package?              @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  subscription  Subscription?         @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  webhookEvents PaymentWebhookEvent[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([provider, providerReference])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model PaymentWebhookEvent {
+  id              String    @id @default(uuid())
+  paymentId       String?
+  provider        String
+  providerEventId String
+  signatureValid  Boolean
+  payloadHash     String
+  processedAt     DateTime?
+
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@unique([provider, providerEventId])
+}

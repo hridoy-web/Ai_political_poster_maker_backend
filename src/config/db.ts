@@ -1,15 +1,19 @@
-import { PrismaClient } from "@prisma/client/extension";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../generated/prisma/client.js";
 
-const prisma = new PrismaClient();
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("DATABASE_URL is missing from .env");
+}
+
+const adapter = new PrismaPg({ connectionString });
+
+export const prisma = new PrismaClient({ adapter });
 
 const connectDB = async (): Promise<void> => {
-    try {
-        await prisma.$connect();
-        console.log(`PostgreSQL Database Connected Successfully via Prisma!`);
-        
-    } catch (error: any) {
-        console.error(`Database connection error: ${error.message}`);
-    }
+  await prisma.$connect();
+  console.log("PostgreSQL connected successfully.");
 };
 
 export default connectDB;
