@@ -7,7 +7,7 @@
     "dev": "tsx watch --env-file=.env src/server.ts",
     "build": "tsc",
     "start": "node --env-file=.env dist/server.js",
-      "seed:templates": "tsx --env-file=.env src/seed/templates.seed.ts"
+    "seed:templates": "tsx --env-file=.env src/seed/templates.seed.ts"
   },
   "keywords": [],
   "author": "",
@@ -15,7 +15,7 @@
   "type": "module",
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
-    "@prisma/client": "^7.10.0",
+    "@prisma/client": "^7.10.1",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.11.0",
     "cookie-parser": "^1.4.7",
