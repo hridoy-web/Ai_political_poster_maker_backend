@@ -5,6 +5,7 @@ import apiRoutes from "./routes/routes.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
 import { notFoundMiddleware } from "./middlewares/notFound.middleware.js";
 
+
 const app = express();
 
 app.use(
@@ -23,5 +24,6 @@ app.get("/", (_req, res) => {
 app.use("/api/v1", apiRoutes);
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
+
 
 export default app;
