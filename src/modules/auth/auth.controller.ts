@@ -1,10 +1,14 @@
 import type { Request, Response } from "express";
-import bcrypt from "bcryptjs";
 
 import { prisma } from "../../config/db.js";
 import { registerSchema, loginSchema } from "./auth.validation.js";
 import cloudinary, { uploadOnCloudinary } from "../../config/cloudinary.js";
-import { cookieOptions, generateToken, SEVEN_DAYS } from "./auth.service.js";
+import {
+  cookieOptions,
+  SEVEN_DAYS,
+  registerUser,
+  loginUser,
+} from "./auth.service.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/ApiError.js";
 import sendResponse from "../../utils/sendResponse.js";
@@ -26,15 +30,6 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
     const { name, email, password } = validation.data;
 
-    // Check existing user
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (existingUser) {
-      throw new ApiError(409, "User already exists with this email");
-    }
-
     // Upload optional profile image
     let imageUrl: string | null = null;
 
@@ -43,26 +38,15 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
         req.file.buffer,
         "political_posters/user_profiles",
       );
+
       imageUrl = uploaded.secure_url;
       uploadedPublicId = uploaded.public_id;
     }
 
-    // Hash password
-    const saltRounds = Number(process.env.SALT_ROUNDS) || 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-      },
-    });
+    // Register user through service
+    const user = await registerUser(name, email, password);
 
     // Create Asset record
-    let assetId: string | null = null;
-
     if (req.file && imageUrl && uploadedPublicId) {
       const asset = await prisma.asset.create({
         data: {
@@ -74,32 +58,26 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
         },
         select: {
           id: true,
-          storageKey: true,
         },
       });
-
-      assetId = asset.id;
 
       // Connect Asset to User
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          avatarAssetId: assetId,
+          avatarAssetId: asset.id,
         },
       });
     }
 
-    // Return response
-    return sendResponse(res, {
-      statusCode: 201,
-      success: true,
-      message: "User registered successfully",
-      data: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-      },
-    });
+    return sendResponse(
+      res,
+      201,
+      "User registered successfully",
+      true,
+      null,
+      user,
+    );
   } catch (error) {
     // Clean up uploaded image if registration fails
     if (uploadedPublicId) {
@@ -110,14 +88,13 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
-    // errorHandler e pathao
     throw error;
   }
 });
 
 // POST /api/v1/auth/login
 export const login = asyncHandler(async (req: Request, res: Response) => {
-  // Zod validation
+  // Validate request body
   const validation = loginSchema.safeParse(req.body);
 
   if (!validation.success) {
@@ -129,54 +106,22 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
   const { email, password } = validation.data;
 
-  // Find user
-  const user = await prisma.user.findUnique({
-    where: { email },
-  });
-
-  if (!user) {
-    throw new ApiError(401, "Invalid email or password");
-  }
-
-  // Compare password
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-
-  if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid email or password");
-  }
-
-  // Generate token
-  const token = generateToken(user.id);
+  // Login through service
+  const result = await loginUser(email, password);
 
   // Set cookie
-  res.cookie("token", token, {
+  res.cookie("token", result.token, {
     ...cookieOptions,
     maxAge: SEVEN_DAYS,
   });
 
-  return sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Login successful",
-    data: {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-      },
-      token,
-    },
-  });
+  return sendResponse(res, 200, "Login successful", true, null, result);
 });
 
 // POST /api/v1/auth/logout
 export const logout = asyncHandler(async (_req: Request, res: Response) => {
+  // Clear cookie
   res.clearCookie("token", cookieOptions);
 
-  return sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Logged out successfully",
-    data: null,
-  });
+  return sendResponse(res, 200, "Logged out successfully", true, null, null);
 });
