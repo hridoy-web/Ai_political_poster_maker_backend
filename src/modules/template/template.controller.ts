@@ -10,11 +10,11 @@ import {
   updateTemplateSchema,
 } from "./template.validation.js";
 
-// Zod error ফরম্যাট করার হেল্পার
+// Zod error
 const formatIssues = (issues: ZodIssue[]) =>
   issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
 
-// টেমপ্লেট তৈরি
+// template create
 const createTemplate = asyncHandler(async (req: Request, res: Response) => {
   const parsed = createTemplateSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -23,15 +23,18 @@ const createTemplate = asyncHandler(async (req: Request, res: Response) => {
 
   const result = await templateService.createTemplate(parsed.data as any);
 
-  sendResponse(res, {
-    statusCode: 201,
-    success: true,
-    message: "Template created successfully",
-    data: result,
-  });
+  // sendResponse(res, statusCode, message, success, error, data)
+  sendResponse(
+    res,
+    201,
+    "Template created successfully",
+    true,
+    null,
+    result
+  );
 });
 
-// টেমপ্লেট তালিকা ও পেজিনেশন ফিল্টারিং
+// list template pagination
 const listTemplates = asyncHandler(async (req: Request, res: Response) => {
   const parsed = listTemplateQuerySchema.safeParse(req.query);
   if (!parsed.success) {
@@ -48,19 +51,21 @@ const listTemplates = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-// নির্দিষ্ট টেমপ্লেটের বিস্তারিত
+// get template by id
 const getTemplate = asyncHandler(async (req: Request, res: Response) => {
   const result = await templateService.getTemplateById(req.params.id as string);
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Template fetched successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+    200,
+    "Template fetched successfully",
+    true,
+    null,
+    result
+  );
 });
 
-// টেমপ্লেট আপডেট
+// template update
 const updateTemplate = asyncHandler(async (req: Request, res: Response) => {
   const parsed = updateTemplateSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -72,48 +77,56 @@ const updateTemplate = asyncHandler(async (req: Request, res: Response) => {
     parsed.data as any
   );
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Template updated successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+    200,
+    "Template updated successfully",
+    true,
+    null,
+    result
+  );
 });
 
-// টেমপ্লেট পাবলিশ করা
+// template publish
 const publishTemplate = asyncHandler(async (req: Request, res: Response) => {
   const result = await templateService.publishTemplate(req.params.id as string);
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Template published successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+    200,
+    "Template published successfully",
+    true,
+    null,
+    result
+  );
 });
 
-// টেমপ্লেট আর্কাইভ করা
+// template archive
 const archiveTemplate = asyncHandler(async (req: Request, res: Response) => {
   const result = await templateService.archiveTemplate(req.params.id as string);
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Template archived successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+    200,
+    "Template archived successfully",
+    true,
+    null,
+    result
+  );
 });
 
-// টেমপ্লেট আন-আর্কাইভ করা
+// template unarchive
 const unarchiveTemplate = asyncHandler(async (req: Request, res: Response) => {
   const result = await templateService.unarchiveTemplate(req.params.id as string);
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Template unarchived successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+    200,
+    "Template unarchived successfully",
+    true,
+    null,
+    result
+  );
 });
 
 export const templateController = {
@@ -123,5 +136,4 @@ export const templateController = {
   updateTemplate,
   publishTemplate,
   archiveTemplate,
-  unarchiveTemplate,
-};
+  unarchiveTemplate,};

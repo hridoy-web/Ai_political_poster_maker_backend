@@ -5,6 +5,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Seeding Categories and Templates...");
 
+  // ১. ক্যাটাগরি তৈরি বা আপডেট
   const politicalCategory = await prisma.templateCategory.upsert({
     where: { slug: "political-posters" },
     update: {},
@@ -18,8 +19,10 @@ async function main() {
 
   console.log(`✅ Category ready: ${politicalCategory.name}`);
 
-  // dynamic HTML ও Config 
+  // ২. ডায়নামিক HTML কনফিগ (এখন Zod স্কিমার সাথে ১০০% মিল রয়েছে)
   const electionTemplateConfig = {
+    type: "html",
+    css: "",
     html: `
       <div style="width: 1080px; height: 1350px; background: linear-gradient(180deg, #0b6623 0%, #000000 100%); color: #ffffff; font-family: Arial, sans-serif; position: relative; box-sizing: border-box; padding: 40px;">
         <div style="text-align: center; border-bottom: 3px solid #f1c40f; padding-bottom: 20px;">
@@ -46,33 +49,51 @@ async function main() {
         </div>
       </div>
     `,
-    placeholders: [
-      { key: "election_slogan", label: "নির্বাচনী স্লোগান", defaultValue: "উন্নয়নের মার্কা ভোট দিন" },
-      { key: "leader_image_url", label: "নেতার ছবি", defaultValue: "https://via.placeholder.com/350" },
-      { key: "leader_name", label: "শীর্ষ নেতার নাম", defaultValue: "জননেতা জনাব..." },
-      { key: "leader_title", label: "নেতার পদবি", defaultValue: "মাননীয় সংসদ সদস্য" },
-      { key: "candidate_name", label: "প্রার্থীর নাম", defaultValue: "মো: আপনার নাম" },
-      { key: "designation", label: "পদবি", defaultValue: "সাধারণ সম্পাদক পদপ্রার্থী" },
-      { key: "party_symbol", label: "নির্বাচনী প্রতীক", defaultValue: "নৌকা / ধানের শীষ / লাঙ্গল" }
+    fields: [
+      { key: "election_slogan", type: "text", label: "নির্বাচনী স্লোগান", default: "উন্নয়নের মার্কা ভোট দিন" },
+      { key: "leader_image_url", type: "image", label: "নেতার ছবি", default: "https://via.placeholder.com/350" },
+      { key: "leader_name", type: "text", label: "শীর্ষ নেতার নাম", default: "জননেতা জনাব..." },
+      { key: "leader_title", type: "text", label: "নেতার পদবি", default: "মাননীয় সংসদ সদস্য" },
+      { key: "candidate_name", type: "text", label: "প্রার্থীর নাম", default: "মো: আপনার নাম" },
+      { key: "designation", type: "text", label: "পদবি", default: "সাধারণ সম্পাদক পদপ্রার্থী" },
+      { key: "party_symbol", type: "text", label: "নির্বাচনী প্রতীক", default: "নৌকা / ধানের শীষ / লাঙ্গল" }
     ]
   };
 
-  // template database insert
-  const template = await prisma.template.create({
-    data: {
-      title: "নির্বাচনী প্রচারণার পোস্টার - ৪:৫",
-      description: "জাতীয় ও স্থানীয় নির্বাচনের জন্য কাস্টমাইজেবল রাজনৈতিক পোস্টার।",
-      categoryId: politicalCategory.id,
-      aspectRatio: "4:5",
-      width: 1080,
-      height: 1350,
-      status: "PUBLISHED",      
-      accessLevel: "FREE",      
-      config: electionTemplateConfig,
+  const templateTitle = "নির্বাচনী প্রচারণার পোস্টার - ৪:৫";
+
+  // ৩. ডুপ্লিকেট এড়াতে চেক করা
+  const existingTemplate = await prisma.template.findFirst({
+    where: { 
+      title: templateTitle,
+      categoryId: politicalCategory.id 
     },
   });
 
-  console.log(`✅ Template created: ${template.title} (ID: ${template.id})`);
+  if (!existingTemplate) {
+    const template = await prisma.template.create({
+      data: {
+        title: templateTitle,
+        description: "জাতীয় ও স্থানীয় নির্বাচনের জন্য কাস্টমাইজেবল রাজনৈতিক পোস্টার।",
+        categoryId: politicalCategory.id,
+        aspectRatio: "4:5",
+        width: 1080,
+        height: 1350,
+        status: "PUBLISHED",      
+        accessLevel: "FREE",      
+        config: electionTemplateConfig,
+      },
+    });
+
+    console.log(`✅ Template created: ${template.title} (ID: ${template.id})`);
+  } else {
+    // আগে থেকেই থাকলে শুধু কনফিগ আপডেট করে দেওয়া
+    await prisma.template.update({
+      where: { id: existingTemplate.id },
+      data: { config: electionTemplateConfig },
+    });
+    console.log(`ℹ️ Template already exists, updated config: ${existingTemplate.title}`);
+  }
 }
 
 main()
