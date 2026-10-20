@@ -23,36 +23,42 @@ const createCategory = asyncHandler(async (req: Request, res: Response) => {
 
   const result = await categoryService.createCategory(parsed.data);
 
-  sendResponse(res, {
-    statusCode: 201,
-    success: true,
-    message: "Category created successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+    201,
+    "Category created successfully",
+    true,
+    null,
+    result
+  );
 });
 
-
+// listCategories
 const listCategories = asyncHandler(async (_req: Request, res: Response) => {
   const result = await categoryService.listCategories(false);
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Categories fetched successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+    200,
+    "Categories fetched successfully",
+    true,
+    null,
+    result
+  );
 });
 
-
+// listAllCategories
 const listAllCategories = asyncHandler(async (_req: Request, res: Response) => {
   const result = await categoryService.listCategories(true);
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "All categories fetched successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+    200,
+    "All categories fetched successfully",
+    true,
+    null,
+    result
+  );
 });
 
 // updated category
@@ -67,12 +73,14 @@ const updateCategory = asyncHandler(async (req: Request, res: Response) => {
     parsed.data
   );
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Category updated successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+    200,
+    "Category updated successfully",
+    true,
+    null,
+    result
+  );
 });
 
 // category status
@@ -87,12 +95,14 @@ const setCategoryStatus = asyncHandler(async (req: Request, res: Response) => {
     parsed.data.isActive
   );
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Category status updated successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+    200,
+    "Category status updated successfully",
+    true,
+    null,
+    result
+  );
 });
 
 export const categoryController = {
