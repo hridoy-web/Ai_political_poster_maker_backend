@@ -1,10 +1,9 @@
-
 import { prisma } from "../../lib/prisma.js";
 import { ApiError } from "../../utils/ApiError.js";
 
-// ১. বুকমার্ক যোগ করা
+
 const addBookmark = async (userId: string, templateId: string) => {
-  // টেমপ্লেটটি আদৌ আছে কিনা যাচাই
+  
   const template = await prisma.template.findUnique({
     where: { id: templateId },
   });
@@ -13,7 +12,12 @@ const addBookmark = async (userId: string, templateId: string) => {
     throw new ApiError(404, "Template not found");
   }
 
-  // আগেই বুকমার্ক করা আছে কিনা চেক করা
+ 
+  if (template.status !== "PUBLISHED") {
+    throw new ApiError(400, "Only published templates can be bookmarked");
+  }
+
+  
   const existingBookmark = await prisma.bookmark.findUnique({
     where: {
       userId_templateId: {
@@ -47,7 +51,7 @@ const addBookmark = async (userId: string, templateId: string) => {
   });
 };
 
-// ২. বুকমার্ক রিমুভ করা
+// Bookmark Remove
 const removeBookmark = async (userId: string, templateId: string) => {
   try {
     return await prisma.bookmark.delete({
@@ -66,10 +70,15 @@ const removeBookmark = async (userId: string, templateId: string) => {
   }
 };
 
-// ৩. লগইন করা ইউজারের বুকমার্ক করা টেমপ্লেট লিস্ট পাওয়া
+// ৩. Get the list of templates bookmarked by the logged-in user.
 const getUserBookmarks = async (userId: string) => {
   const bookmarks = await prisma.bookmark.findMany({
-    where: { userId },
+    where: { 
+      userId,
+      template: {
+        status: "PUBLISHED", 
+      },
+    },
     orderBy: { createdAt: "desc" },
     include: {
       template: {

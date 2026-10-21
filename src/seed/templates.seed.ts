@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Seeding Categories and Templates...");
 
-  // ১. ক্যাটাগরি তৈরি বা আপডেট
+  // Create or Update Category
   const politicalCategory = await prisma.templateCategory.upsert({
     where: { slug: "political-posters" },
     update: {},
@@ -19,7 +19,7 @@ async function main() {
 
   console.log(`✅ Category ready: ${politicalCategory.name}`);
 
-  // ২. ডায়নামিক HTML কনফিগ (এখন Zod স্কিমার সাথে ১০০% মিল রয়েছে)
+  // Dynamic HTML Configuration (Now 100% aligned with the Zod schema)
   const electionTemplateConfig = {
     type: "html",
     css: "",
@@ -62,7 +62,6 @@ async function main() {
 
   const templateTitle = "নির্বাচনী প্রচারণার পোস্টার - ৪:৫";
 
-  // ৩. ডুপ্লিকেট এড়াতে চেক করা
   const existingTemplate = await prisma.template.findFirst({
     where: { 
       title: templateTitle,
@@ -87,7 +86,7 @@ async function main() {
 
     console.log(`✅ Template created: ${template.title} (ID: ${template.id})`);
   } else {
-    // আগে থেকেই থাকলে শুধু কনফিগ আপডেট করে দেওয়া
+   
     await prisma.template.update({
       where: { id: existingTemplate.id },
       data: { config: electionTemplateConfig },
