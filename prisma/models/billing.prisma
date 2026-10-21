@@ -1,33 +1,3 @@
-enum MoneyEntryType {
-  DEPOSIT
-  WITHDRAWAL
-  PACKAGE_PURCHASE
-  REFUND
-}
-
-enum CreditEntryType {
-  PURCHASE
-  GRANT
-  RESERVE
-  SETTLE
-  REFUND
-}
-
-enum PaymentStatus {
-  PENDING
-  VALIDATED
-  FAILED
-  CANCELLED
-  REFUNDED
-}
-
-enum SubscriptionStatus {
-  PENDING
-  ACTIVE
-  EXPIRED
-  CANCELLED
-}
-
 // WALLET & LEDGERS
 
 // Money Wallet
