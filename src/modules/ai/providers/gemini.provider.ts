@@ -26,7 +26,7 @@ export class GeminiProvider implements IAiTextProvider {
       throw new Error("Gemini API key is not configured");
     }
 
-    const count = input.count ?? 3;
+    const count = input.count ?? 4;
     const prompt = buildSloganPrompt(input);
 
     const timeoutPromise = new Promise<never>((_, reject) =>
@@ -43,7 +43,6 @@ export class GeminiProvider implements IAiTextProvider {
     });
 
     const response = await Promise.race([generatePromise, timeoutPromise]);
-
     const text = response.text?.trim() ?? "{}";
     const slogans = parseSlogansJson(text);
 

@@ -132,8 +132,8 @@ export function parseSlogansJson(rawText: string): ISloganItem[] {
         };
       })
       .filter((item: ISloganItem) => item.slogan.length > 0);
-  } catch (err) {
-    console.error("[AiPrompt] Failed to parse JSON from AI model response:", err, rawText);
+  } catch (err: any) {
+    console.error("[AiPrompt] Failed to parse JSON from AI model response:", err?.message || err);
     return [];
   }
 }

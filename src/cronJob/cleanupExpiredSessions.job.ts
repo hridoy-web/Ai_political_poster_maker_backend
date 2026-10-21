@@ -2,7 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { AiTaskStatus } from "@prisma/client";
 
 /**
- * Interface representing the summary result of a maintenance cleanup execution.
+ * Summary metrics of maintenance cleanup execution.
  */
 export interface ICleanupMaintenanceResult {
   success: boolean;
@@ -16,11 +16,8 @@ export interface ICleanupMaintenanceResult {
 }
 
 /**
- * 1. Cleanup Timed-Out AI Tasks
- * 
- * Scans the database for AI tasks that have remained in 'PENDING' status for longer than
- * the specified timeout threshold (default: 30 minutes).
- * Safely marks these tasks as 'FAILED' with errorCode 'AI_TASK_TIMED_OUT'.
+ * Scans for AI tasks remaining in PENDING past the cutoff threshold (default: 30m).
+ * Safely marks them FAILED to avoid infinite loading in user dashboards.
  */
 export async function cleanupTimedOutAiTasks(timeoutMinutes: number = 30): Promise<number> {
   const cutoffTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
@@ -43,13 +40,9 @@ export async function cleanupTimedOutAiTasks(timeoutMinutes: number = 30): Promi
 }
 
 /**
- * 2. Recover Stuck 'PROCESSING' AI Tasks (Worker Crash Recovery)
- * 
- * Detects tasks that have been in 'PROCESSING' for longer than the cutoff (default: 15 minutes)
- * caused by sudden worker terminations, pod restarts, or network disruptions.
- * 
- * If retryCount < maxRetries: resets to 'PENDING' so another worker picks it up.
- * If retryCount >= maxRetries: marks as 'FAILED' with 'MAX_RETRIES_EXCEEDED'.
+ * Detects tasks stuck in PROCESSING due to worker crashes or sudden pod terminations.
+ * If retries remain: resets to PENDING so another worker can retry.
+ * If maxRetries exceeded: marks as FAILED permanently.
  */
 export async function recoverStuckProcessingAiTasks(
   stuckThresholdMinutes: number = 15
@@ -101,10 +94,7 @@ export async function recoverStuckProcessingAiTasks(
 }
 
 /**
- * 3. Cleanup Expired Guest Sessions
- * 
- * Deletes guest sessions whose expiration timestamp ('expiresAt') has passed and were
- * never claimed or linked to a registered user account ('userId' is null and 'claimedAt' is null).
+ * Deletes unlinked guest sessions that passed their expiration timestamp.
  */
 export async function cleanupExpiredGuestSessions(): Promise<number> {
   const result = await prisma.guestSession.deleteMany({
@@ -121,9 +111,7 @@ export async function cleanupExpiredGuestSessions(): Promise<number> {
 }
 
 /**
- * 4. Run All Scheduled Cleanups (Main Runner)
- * 
- * Executes timed-out task mitigation, stuck job crash recovery, and expired guest session pruning.
+ * Main maintenance cleanup cycle runner.
  */
 export async function runScheduledCleanup(
   aiTimeoutMinutes: number = 30,
@@ -176,10 +164,7 @@ export async function runScheduledCleanup(
 }
 
 /**
- * 5. Background Cron Job Scheduler
- * 
- * Starts an in-memory recurring interval timer to run maintenance cleanups at a regular cadence.
- * Uses timer.unref() so background execution does not block clean Node.js process shutdowns.
+ * In-memory recurring cron scheduler for maintenance operations.
  */
 export function startCleanupCronJob(
   intervalMinutes: number = 30,

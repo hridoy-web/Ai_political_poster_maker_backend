@@ -1,24 +1,21 @@
 /**
- * Utility functions for AI module security and data sanitization.
- * Ensures compliance with PRD Rule 9: "Prompt/result log-এ sensitive data না রাখা।"
+ * Data Sanitization & Privacy Protection Utility
+ *
+ * Enforces PRD Requirement #9: Masks PII (personally identifiable information like phone numbers,
+ * emails, credentials) prior to emission in stdout, application logs, or error stack traces.
  */
 
 /**
- * Masks sensitive patterns such as Bangladeshi phone numbers, emails, and credentials
+ * Masks sensitive patterns such as phone numbers, emails, and credentials
  * within raw strings before logging to stdout or server logs.
  */
 export function maskSensitiveString(str: string): string {
   if (!str || typeof str !== "string") return str;
 
-  // Mask Bangladeshi phone numbers (+8801XXXXXXXXX or 01XXXXXXXXX)
-  // Example: 01712345678 -> 017****5678
-  let sanitized = str.replace(
-    /(\+?8801[3-9]\d{1})(\d{4})(\d{3})/g,
-    "$1****$3"
-  ).replace(
-    /(01[3-9]\d{1})(\d{4})(\d{3})/g,
-    "$1****$3"
-  );
+  // Mask Bangladeshi phone numbers (+8801XXXXXXXXX or 01XXXXXXXXX) -> e.g. 0171****5678
+  let sanitized = str
+    .replace(/(\+?8801[3-9]\d{1})(\d{4})(\d{3})/g, "$1****$3")
+    .replace(/(01[3-9]\d{1})(\d{4})(\d{3})/g, "$1****$3");
 
   // Mask email addresses: john.doe@example.com -> j***e@example.com
   sanitized = sanitized.replace(
@@ -30,8 +27,7 @@ export function maskSensitiveString(str: string): string {
 }
 
 /**
- * Deeply sanitizes any object, array, or primitive before printing in server logs.
- * Masks sensitive keys (password, token, apiKey, secret, creditCard) and sensitive string patterns.
+ * Recursively redacts sensitive keys and patterns from objects, arrays, or primitive values.
  */
 export function sanitizeLogData<T = any>(data: T): T {
   if (data === null || data === undefined) {
