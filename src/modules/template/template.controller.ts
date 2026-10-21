@@ -10,28 +10,28 @@ import {
   updateTemplateSchema,
 } from "./template.validation.js";
 
-// Zod error ফরম্যাট করার হেল্পার
 const formatIssues = (issues: ZodIssue[]) =>
   issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
 
-// টেমপ্লেট তৈরি
 const createTemplate = asyncHandler(async (req: Request, res: Response) => {
   const parsed = createTemplateSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ApiError(400, formatIssues(parsed.error.issues));
   }
 
-  const result = await templateService.createTemplate(parsed.data as any);
+  const userId = (req as any).user?.id;
+  const data = await templateService.createTemplate(parsed.data as any, userId);
 
-  sendResponse(res, {
-    statusCode: 201,
-    success: true,
-    message: "Template created successfully",
-    data: result,
-  });
+  sendResponse(
+    res, 
+    201,
+     "Template created successfully",
+      true,
+      null,
+      data
+      );
 });
 
-// টেমপ্লেট তালিকা ও পেজিনেশন ফিল্টারিং
 const listTemplates = asyncHandler(async (req: Request, res: Response) => {
   const parsed = listTemplateQuerySchema.safeParse(req.query);
   if (!parsed.success) {
@@ -40,80 +40,67 @@ const listTemplates = asyncHandler(async (req: Request, res: Response) => {
 
   const result = await templateService.listTemplates(parsed.data);
 
-  res.status(200).json({
-    success: true,
-    message: "Templates fetched successfully",
-    data: result.items,
+  
+  sendResponse(res, 200, "Templates fetched successfully", true, null, {
+    items: result.items,
     meta: result.meta,
   });
 });
 
-// নির্দিষ্ট টেমপ্লেটের বিস্তারিত
 const getTemplate = asyncHandler(async (req: Request, res: Response) => {
-  const result = await templateService.getTemplateById(req.params.id as string);
+  const user = (req as any).user;
+  const data = await templateService.getTemplateById(req.params.id as string, user);
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Template fetched successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+     200,
+      "Template fetched successfully", 
+      true,
+      null,
+      data);
 });
 
-// টেমপ্লেট আপডেট
 const updateTemplate = asyncHandler(async (req: Request, res: Response) => {
   const parsed = updateTemplateSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ApiError(400, formatIssues(parsed.error.issues));
   }
 
-  const result = await templateService.updateTemplate(
+  const userId = (req as any).user?.id;
+  const data = await templateService.updateTemplate(
     req.params.id as string,
-    parsed.data as any
+    parsed.data as any,
+    userId
   );
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Template updated successfully",
-    data: result,
-  });
+  sendResponse(
+    res,
+     200,
+      "Template updated successfully",
+      true,
+      null,
+      data);
 });
 
-// টেমপ্লেট পাবলিশ করা
 const publishTemplate = asyncHandler(async (req: Request, res: Response) => {
-  const result = await templateService.publishTemplate(req.params.id as string);
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Template published successfully",
-    data: result,
-  });
+  const data = await templateService.publishTemplate(req.params.id as string);
+  sendResponse(res, 200, "Template published successfully", true, null, data);
 });
 
-// টেমপ্লেট আর্কাইভ করা
 const archiveTemplate = asyncHandler(async (req: Request, res: Response) => {
-  const result = await templateService.archiveTemplate(req.params.id as string);
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Template archived successfully",
-    data: result,
-  });
+  const data = await templateService.archiveTemplate(req.params.id as string);
+  sendResponse(
+    res,
+     200, 
+     "Template archived successfully",
+      true,
+      null,
+      data);
 });
 
-// টেমপ্লেট আন-আর্কাইভ করা
 const unarchiveTemplate = asyncHandler(async (req: Request, res: Response) => {
-  const result = await templateService.unarchiveTemplate(req.params.id as string);
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Template unarchived successfully",
-    data: result,
-  });
+  const data = await templateService.unarchiveTemplate(req.params.id as string);
+  sendResponse(res, 200, "Template unarchived successfully", true, null, data);
 });
 
 export const templateController = {

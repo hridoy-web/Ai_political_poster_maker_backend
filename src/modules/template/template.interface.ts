@@ -33,7 +33,7 @@ export interface IListTemplateQuery {
   limit: number;
 }
 
-// শুধু seed-এর জন্য
+// only seeds
 export interface ITheme {
   title: string;
   category: { name: string; slug: string; sortOrder: number };

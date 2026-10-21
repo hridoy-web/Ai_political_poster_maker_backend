@@ -45,6 +45,9 @@ enum MoneyEntryType {
   POSTER_DEBIT
   REFUND
   ADJUSTMENT
+  DEPOSIT
+  WITHDRAWAL
+  PACKAGE_PURCHASE
 }
 
 enum CreditEntryType {
@@ -53,6 +56,10 @@ enum CreditEntryType {
   POSTER_DEBIT
   REFUND
   ADJUSTMENT
+  PURCHASE
+  GRANT
+  RESERVE
+  SETTLE
 }
 
 enum PaymentStatus {
@@ -61,6 +68,7 @@ enum PaymentStatus {
   FAILED
   CANCELLED
   REFUNDED
+  VALIDATED
 }
 
 enum SubscriptionStatus {
