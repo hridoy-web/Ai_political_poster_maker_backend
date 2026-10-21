@@ -7,6 +7,8 @@ import { AiTaskStatus } from "@prisma/client";
 export interface ICleanupMaintenanceResult {
   success: boolean;
   timedOutTasksCount: number;
+  recoveredProcessingTasksCount: number;
+  failedStuckTasksCount: number;
   expiredSessionsCount: number;
   durationMs: number;
   executedAt: Date;
@@ -17,14 +19,8 @@ export interface ICleanupMaintenanceResult {
  * 1. Cleanup Timed-Out AI Tasks
  * 
  * Scans the database for AI tasks that have remained in 'PENDING' status for longer than
- * the specified timeout threshold (default: 30 minutes). Such tasks typically indicate
- * unhandled server restarts, network timeouts, or interrupted client connections.
- * 
- * Safely marks these tasks as 'FAILED' with errorCode 'AI_TASK_TIMED_OUT' so users
- * are not left waiting indefinitely and their dashboard state remains accurate.
- *
- * @param timeoutMinutes - Threshold in minutes after which a pending task is considered timed out.
- * @returns Number of affected tasks updated.
+ * the specified timeout threshold (default: 30 minutes).
+ * Safely marks these tasks as 'FAILED' with errorCode 'AI_TASK_TIMED_OUT'.
  */
 export async function cleanupTimedOutAiTasks(timeoutMinutes: number = 30): Promise<number> {
   const cutoffTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
@@ -47,16 +43,68 @@ export async function cleanupTimedOutAiTasks(timeoutMinutes: number = 30): Promi
 }
 
 /**
- * 2. Cleanup Expired Guest Sessions
+ * 2. Recover Stuck 'PROCESSING' AI Tasks (Worker Crash Recovery)
+ * 
+ * Detects tasks that have been in 'PROCESSING' for longer than the cutoff (default: 15 minutes)
+ * caused by sudden worker terminations, pod restarts, or network disruptions.
+ * 
+ * If retryCount < maxRetries: resets to 'PENDING' so another worker picks it up.
+ * If retryCount >= maxRetries: marks as 'FAILED' with 'MAX_RETRIES_EXCEEDED'.
+ */
+export async function recoverStuckProcessingAiTasks(
+  stuckThresholdMinutes: number = 15
+): Promise<{ recoveredCount: number; failedCount: number }> {
+  const cutoffTime = new Date(Date.now() - stuckThresholdMinutes * 60 * 1000);
+
+  const stuckTasks = await prisma.aiTask.findMany({
+    where: {
+      status: AiTaskStatus.PROCESSING,
+      createdAt: { lt: cutoffTime },
+    },
+    select: {
+      id: true,
+      retryCount: true,
+      maxRetries: true,
+    },
+  });
+
+  let recoveredCount = 0;
+  let failedCount = 0;
+
+  for (const task of stuckTasks) {
+    const nextRetry = task.retryCount + 1;
+    if (nextRetry < task.maxRetries) {
+      await prisma.aiTask.update({
+        where: { id: task.id },
+        data: {
+          status: AiTaskStatus.PENDING,
+          retryCount: nextRetry,
+          errorCode: "RECOVERED_FROM_WORKER_CRASH",
+        },
+      });
+      recoveredCount++;
+    } else {
+      await prisma.aiTask.update({
+        where: { id: task.id },
+        data: {
+          status: AiTaskStatus.FAILED,
+          retryCount: nextRetry,
+          errorCode: "MAX_RETRIES_EXCEEDED_AFTER_CRASH",
+          completedAt: new Date(),
+        },
+      });
+      failedCount++;
+    }
+  }
+
+  return { recoveredCount, failedCount };
+}
+
+/**
+ * 3. Cleanup Expired Guest Sessions
  * 
  * Deletes guest sessions whose expiration timestamp ('expiresAt') has passed and were
  * never claimed or linked to a registered user account ('userId' is null and 'claimedAt' is null).
- * 
- * In accordance with the Prisma schema:
- * - Temporary upload assets associated with the session are automatically cascaded.
- * - Historical poster/AI records safely have their guestSessionId set to null.
- *
- * @returns Number of expired guest sessions removed.
  */
 export async function cleanupExpiredGuestSessions(): Promise<number> {
   const result = await prisma.guestSession.deleteMany({
@@ -73,16 +121,13 @@ export async function cleanupExpiredGuestSessions(): Promise<number> {
 }
 
 /**
- * 3. Run All Scheduled Cleanups (Main Runner)
+ * 4. Run All Scheduled Cleanups (Main Runner)
  * 
- * Executes both timed-out AI task mitigation and expired guest session pruning.
- * Measures execution duration and provides structured logging.
- *
- * @param aiTimeoutMinutes - Cutoff threshold for pending AI tasks.
- * @returns ICleanupMaintenanceResult containing summary metrics.
+ * Executes timed-out task mitigation, stuck job crash recovery, and expired guest session pruning.
  */
 export async function runScheduledCleanup(
-  aiTimeoutMinutes: number = 30
+  aiTimeoutMinutes: number = 30,
+  stuckThresholdMinutes: number = 15
 ): Promise<ICleanupMaintenanceResult> {
   const startTime = Date.now();
   const executedAt = new Date();
@@ -91,18 +136,22 @@ export async function runScheduledCleanup(
 
   try {
     const timedOutTasksCount = await cleanupTimedOutAiTasks(aiTimeoutMinutes);
+    const { recoveredCount, failedCount } = await recoverStuckProcessingAiTasks(stuckThresholdMinutes);
     const expiredSessionsCount = await cleanupExpiredGuestSessions();
     const durationMs = Date.now() - startTime;
 
     console.log(
       `[Maintenance CronJob] Finished in ${durationMs}ms: ` +
         `[AiTasks timed-out: ${timedOutTasksCount}] | ` +
+        `[Stuck tasks recovered: ${recoveredCount}, failed: ${failedCount}] | ` +
         `[GuestSessions purged: ${expiredSessionsCount}]`
     );
 
     return {
       success: true,
       timedOutTasksCount,
+      recoveredProcessingTasksCount: recoveredCount,
+      failedStuckTasksCount: failedCount,
       expiredSessionsCount,
       durationMs,
       executedAt,
@@ -116,6 +165,8 @@ export async function runScheduledCleanup(
     return {
       success: false,
       timedOutTasksCount: 0,
+      recoveredProcessingTasksCount: 0,
+      failedStuckTasksCount: 0,
       expiredSessionsCount: 0,
       durationMs,
       executedAt,
@@ -125,18 +176,15 @@ export async function runScheduledCleanup(
 }
 
 /**
- * 4. Background Cron Job Scheduler
+ * 5. Background Cron Job Scheduler
  * 
  * Starts an in-memory recurring interval timer to run maintenance cleanups at a regular cadence.
  * Uses timer.unref() so background execution does not block clean Node.js process shutdowns.
- *
- * @param intervalMinutes - Recurrence interval in minutes (default: 30 minutes).
- * @param aiTimeoutMinutes - Inactivity cutoff for pending AI tasks (default: 30 minutes).
- * @returns NodeJS.Timeout handle for the scheduler.
  */
 export function startCleanupCronJob(
   intervalMinutes: number = 30,
-  aiTimeoutMinutes: number = 30
+  aiTimeoutMinutes: number = 30,
+  stuckThresholdMinutes: number = 15
 ): NodeJS.Timeout {
   console.log(
     `[Maintenance CronJob] Scheduler initialized to run every ${intervalMinutes} minute(s).`
@@ -145,12 +193,11 @@ export function startCleanupCronJob(
   const intervalMs = intervalMinutes * 60 * 1000;
 
   const timer = setInterval(() => {
-    runScheduledCleanup(aiTimeoutMinutes).catch((err) => {
+    runScheduledCleanup(aiTimeoutMinutes, stuckThresholdMinutes).catch((err) => {
       console.error("[Maintenance CronJob] Uncaught error in scheduled execution cycle:", err);
     });
   }, intervalMs);
 
-  // Unref ensures process shutdown is not blocked if the server receives SIGINT/SIGTERM
   if (typeof timer.unref === "function") {
     timer.unref();
   }

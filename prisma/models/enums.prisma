@@ -80,6 +80,7 @@ enum AiTaskType {
 
 enum AiTaskStatus {
   PENDING
+  PROCESSING
   SUCCEEDED
   FAILED
 }

@@ -47,3 +47,31 @@ export interface IAiTextProvider {
   }>;
 }
 
+/**
+ * Auth context extracted from JWT or guest session cookies/headers
+ */
+export interface IAuthContext {
+  userId?: string;
+  guestSessionId?: string;
+  role?: string;
+}
+
+/**
+ * Payload for enqueuing generic background AI tasks
+ */
+export interface ICreateAiTaskInput {
+  type: AiTaskType;
+  input: Record<string, any>;
+  idempotencyKey?: string;
+}
+
+/**
+ * Payload for enqueuing async background removal
+ */
+export interface IRemoveBackgroundInput {
+  imageUrl: string;
+  outputFormat?: "png" | "webp";
+  idempotencyKey?: string;
+}
+
+
