@@ -1,5 +1,5 @@
 import { prisma } from "../../lib/prisma.js";
-import type { Prisma } from "@prisma/client";
+import { ApiError } from "../../utils/ApiError.js";
 import { cleanTemplateHtml, cleanTemplateCss } from "../../lib/sanitizeHtml.js";
 import { configSchema } from "./template.validation.js";
 import type {
@@ -14,28 +14,32 @@ const sanitizeConfig = (config: any) => ({
   css: cleanTemplateCss(config.css ?? ""),
 });
 
-type HttpError = Error & { statusCode?: number };
+// Dev 8: Asset Ownership & Visibility Check
+const validatePreviewAsset = async (assetId: string, userId?: string) => {
+  const asset = await prisma.asset.findUnique({
+    where: { id: assetId },
+  });
 
-const httpError = (statusCode: number, message: string): HttpError => {
-  const error = new Error(message) as HttpError;
-  error.statusCode = statusCode;
-  return error;
+  if (!asset) {
+    throw new ApiError(404, "Preview asset not found");
+  }
+  if (asset.deletedAt) {
+    throw new ApiError(400, "Preview asset is deleted");
+  }
+  if (asset.ownerUserId && userId && asset.ownerUserId !== userId) {
+    throw new ApiError(403, "Cannot use another user's private asset as preview");
+  }
 };
 
-const createTemplate = async (data:ICreateTemplateInput) => {
-  // category exists and active
+const createTemplate = async (data: ICreateTemplateInput, userId?: string) => {
   const category = await prisma.templateCategory.findUnique({
     where: { id: data.categoryId },
   });
-  if (!category) throw httpError(404, "Category not found");
-  if (!category.isActive) throw httpError(400, "Category is inactive");
+  if (!category) throw new ApiError(404, "Category not found");
+  if (!category.isActive) throw new ApiError(400, "Category is inactive");
 
-  // preview asset exists
   if (data.previewAssetId) {
-    const asset = await prisma.asset.findUnique({
-      where: { id: data.previewAssetId },
-    });
-    if (!asset) throw httpError(404, "Preview asset not found");
+    await validatePreviewAsset(data.previewAssetId, userId);
   }
 
   return prisma.template.create({
@@ -71,35 +75,46 @@ const listTemplates = async (query: IListTemplateQuery) => {
   };
 };
 
-const getTemplateById = async (id: string) => {
+// Dev 7: Entitlement check integration
+const getTemplateById = async (id: string, user?: { id: string; role?: string; isPremium?: boolean }) => {
   const template = await prisma.template.findUnique({ where: { id } });
-  if (!template) throw httpError(404, "Template not found");
+  if (!template) throw new ApiError(404, "Template not found");
+
+  // Premium template check
+  if (template.accessLevel === "PREMIUM") {
+    // Admin full access
+    if (user?.role !== "ADMIN") {
+     
+      if (!user || !user.isPremium) {
+        throw new ApiError(403, "This is a premium template. Premium entitlement required.");
+      }
+    }
+  }
+
   return template;
 };
 
 const updateTemplate = async (
   id: string,
-  data: IUpdateTemplateInput
+  data: IUpdateTemplateInput,
+  userId?: string
 ) => {
   const template = await prisma.template.findUnique({ where: { id } });
-  if (!template) throw httpError(404, "Template not found");
+  if (!template) throw new ApiError(404, "Template not found");
   if (template.status === "ARCHIVED") {
-    throw httpError(400, "Archived template cannot be edited");
+    throw new ApiError(400, "Archived template cannot be edited");
   }
 
   if (data.categoryId) {
     const category = await prisma.templateCategory.findUnique({
       where: { id: data.categoryId },
     });
-    if (!category) throw httpError(404, "Category not found");
-    if (!category.isActive) throw httpError(400, "Category is inactive");
+    if (!category) throw new ApiError(404, "Category not found");
+    if (!category.isActive) throw new ApiError(400, "Category is inactive");
   }
 
   if (data.previewAssetId) {
-    const asset = await prisma.asset.findUnique({
-      where: { id: data.previewAssetId },
-    });
-    if (!asset) throw httpError(404, "Preview asset not found");
+    await validatePreviewAsset(data.previewAssetId, userId);
   }
 
   const updateData = data.config
@@ -111,15 +126,14 @@ const updateTemplate = async (
 
 const publishTemplate = async (id: string) => {
   const template = await prisma.template.findUnique({ where: { id } });
-  if (!template) throw httpError(404, "Template not found");
+  if (!template) throw new ApiError(404, "Template not found");
   if (template.status !== "DRAFT") {
-    throw httpError(400, "Only draft template can be published");
+    throw new ApiError(400, "Only draft template can be published");
   }
 
-  // config must match the current HTML format
   const result = configSchema.safeParse(template.config);
   if (!result.success) {
-    throw httpError(400, "Template config is invalid or in old format");
+    throw new ApiError(400, "Template config is invalid or in old format");
   }
 
   return prisma.template.update({
@@ -130,9 +144,9 @@ const publishTemplate = async (id: string) => {
 
 const archiveTemplate = async (id: string) => {
   const template = await prisma.template.findUnique({ where: { id } });
-  if (!template) throw httpError(404, "Template not found");
+  if (!template) throw new ApiError(404, "Template not found");
   if (template.status !== "PUBLISHED") {
-    throw httpError(400, "Only published template can be archived");
+    throw new ApiError(400, "Only published template can be archived");
   }
 
   return prisma.template.update({
@@ -143,9 +157,9 @@ const archiveTemplate = async (id: string) => {
 
 const unarchiveTemplate = async (id: string) => {
   const template = await prisma.template.findUnique({ where: { id } });
-  if (!template) throw httpError(404, "Template not found");
+  if (!template) throw new ApiError(404, "Template not found");
   if (template.status !== "ARCHIVED") {
-    throw httpError(400, "Only archived template can be restored");
+    throw new ApiError(400, "Only archived template can be restored");
   }
 
   return prisma.template.update({

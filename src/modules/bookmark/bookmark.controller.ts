@@ -4,7 +4,7 @@ import { ApiError } from "../../utils/ApiError.js";
 import sendResponse from "../../utils/sendResponse.js";
 import { bookmarkService } from "./bookmark.service.js";
 
-// ১. বুকমার্ক যুক্ত করা
+// Bookmark add
 const addBookmark = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
   const { templateId } = req.body;
@@ -28,7 +28,7 @@ const addBookmark = asyncHandler(async (req: Request, res: Response) => {
     result);
 });
 
-// ২. বুকমার্ক রিমুভ করা
+// Bookmark remove
 const removeBookmark = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
   const { templateId } = req.params;
@@ -48,7 +48,7 @@ const removeBookmark = asyncHandler(async (req: Request, res: Response) => {
     result);
 });
 
-// ৩. ইউজারের সব বুকমার্ক পাওয়া
+// all bookmark user
 const getMyBookmarks = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
 
