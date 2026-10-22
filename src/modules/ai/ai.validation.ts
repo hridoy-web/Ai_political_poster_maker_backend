@@ -37,5 +37,3 @@ export const removeBackgroundSchema = z.object({
   outputFormat: z.enum(["png", "webp"]).default("png"),
   idempotencyKey: z.string().trim().min(8).max(128).optional(),
 });
-
-

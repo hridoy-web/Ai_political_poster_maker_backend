@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { ZodIssue } from "zod";
+import { ZodSchema, ZodIssue } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/ApiError.js";
 import sendResponse from "../../utils/sendResponse.js";
@@ -11,8 +11,16 @@ import {
   removeBackgroundSchema,
 } from "./ai.validation.js";
 
-const formatIssues = (issues: ZodIssue[]) =>
+const formatIssues = (issues: ZodIssue[]): string =>
   issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
+
+const validateData = <T>(schema: ZodSchema<T>, data: unknown): T => {
+  const parsed = schema.safeParse(data);
+  if (!parsed.success) {
+    throw new ApiError(400, formatIssues(parsed.error.issues));
+  }
+  return parsed.data;
+};
 
 const extractAuthContext = (req: Request) => {
   const userId = (req as any).user?.id as string | undefined;
@@ -23,13 +31,8 @@ const extractAuthContext = (req: Request) => {
 };
 
 const generateSlogans = asyncHandler(async (req: Request, res: Response) => {
-  const parsed = generateSlogansSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new ApiError(400, formatIssues(parsed.error.issues));
-  }
-
-  const authContext = extractAuthContext(req);
-  const data = await aiService.generateSlogans(parsed.data, authContext);
+  const input = validateData(generateSlogansSchema, req.body);
+  const data = await aiService.generateSlogans(input, extractAuthContext(req));
 
   sendResponse(
     res,
@@ -42,13 +45,8 @@ const generateSlogans = asyncHandler(async (req: Request, res: Response) => {
 });
 
 const createTask = asyncHandler(async (req: Request, res: Response) => {
-  const parsed = createAiTaskSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new ApiError(400, formatIssues(parsed.error.issues));
-  }
-
-  const authContext = extractAuthContext(req);
-  const data = await aiService.enqueueTask(parsed.data, authContext);
+  const input = validateData(createAiTaskSchema, req.body);
+  const data = await aiService.enqueueTask(input, extractAuthContext(req));
 
   sendResponse(
     res,
@@ -61,13 +59,8 @@ const createTask = asyncHandler(async (req: Request, res: Response) => {
 });
 
 const removeBackground = asyncHandler(async (req: Request, res: Response) => {
-  const parsed = removeBackgroundSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new ApiError(400, formatIssues(parsed.error.issues));
-  }
-
-  const authContext = extractAuthContext(req);
-  const data = await aiService.enqueueBackgroundRemoval(parsed.data, authContext);
+  const input = validateData(removeBackgroundSchema, req.body);
+  const data = await aiService.enqueueBackgroundRemoval(input, extractAuthContext(req));
 
   sendResponse(
     res,
@@ -80,13 +73,8 @@ const removeBackground = asyncHandler(async (req: Request, res: Response) => {
 });
 
 const getTaskStatus = asyncHandler(async (req: Request, res: Response) => {
-  const parsed = getTaskStatusParamsSchema.safeParse(req.params);
-  if (!parsed.success) {
-    throw new ApiError(400, formatIssues(parsed.error.issues));
-  }
-
-  const authContext = extractAuthContext(req);
-  const data = await aiService.getTaskById(parsed.data.id, authContext);
+  const { id } = validateData(getTaskStatusParamsSchema, req.params);
+  const data = await aiService.getTaskById(id, extractAuthContext(req));
 
   sendResponse(
     res,
