@@ -13,7 +13,7 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/ApiError.js";
 import sendResponse from "../../utils/sendResponse.js";
 
-// POST /api/v1/auth/register
+// POST /api/v1/auth/register controller
 export const register = asyncHandler(async (req: Request, res: Response) => {
   let uploadedPublicId: string | null = null;
 
