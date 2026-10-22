@@ -1,4 +1,8 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
+import { ZodIssue } from "zod";
+import { asyncHandler } from "../../utils/asyncHandler.js";
+import { ApiError } from "../../utils/ApiError.js";
+import sendResponse from "../../utils/sendResponse.js";
 import { aiService } from "./ai.service.js";
 import {
   generateSlogansSchema,
@@ -7,15 +11,7 @@ import {
   removeBackgroundSchema,
 } from "./ai.validation.js";
 
-type HttpError = Error & { statusCode?: number };
-
-const badRequest = (message: string): HttpError => {
-  const error = new Error(message) as HttpError;
-  error.statusCode = 400;
-  return error;
-};
-
-const formatIssues = (issues: { path: PropertyKey[]; message: string }[]) =>
+const formatIssues = (issues: ZodIssue[]) =>
   issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
 
 const extractAuthContext = (req: Request) => {
@@ -26,82 +22,81 @@ const extractAuthContext = (req: Request) => {
   return { userId, guestSessionId, role };
 };
 
-const generateSlogans = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const parsed = generateSlogansSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return next(badRequest(formatIssues(parsed.error.issues)));
-    }
-
-    const authContext = extractAuthContext(req);
-    const data = await aiService.generateSlogans(parsed.data, authContext);
-
-    res.status(201).json({
-      success: true,
-      data,
-    });
-  } catch (err) {
-    next(err);
+const generateSlogans = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = generateSlogansSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, formatIssues(parsed.error.issues));
   }
-};
 
-const createTask = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const parsed = createAiTaskSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return next(badRequest(formatIssues(parsed.error.issues)));
-    }
+  const authContext = extractAuthContext(req);
+  const data = await aiService.generateSlogans(parsed.data, authContext);
 
-    const authContext = extractAuthContext(req);
-    const data = await aiService.enqueueTask(parsed.data, authContext);
+  sendResponse(
+    res,
+    201,
+    "Slogans generated successfully",
+    true,
+    null,
+    data
+  );
+});
 
-    res.status(202).json({
-      success: true,
-      message: "AI task enqueued successfully",
-      data,
-    });
-  } catch (err) {
-    next(err);
+const createTask = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = createAiTaskSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, formatIssues(parsed.error.issues));
   }
-};
 
-const removeBackground = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const parsed = removeBackgroundSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return next(badRequest(formatIssues(parsed.error.issues)));
-    }
+  const authContext = extractAuthContext(req);
+  const data = await aiService.enqueueTask(parsed.data, authContext);
 
-    const authContext = extractAuthContext(req);
-    const data = await aiService.enqueueBackgroundRemoval(parsed.data, authContext);
+  sendResponse(
+    res,
+    202,
+    "AI task enqueued successfully",
+    true,
+    null,
+    data
+  );
+});
 
-    res.status(202).json({
-      success: true,
-      message: "Background removal task enqueued successfully",
-      data,
-    });
-  } catch (err) {
-    next(err);
+const removeBackground = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = removeBackgroundSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, formatIssues(parsed.error.issues));
   }
-};
 
-const getTaskStatus = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const parsed = getTaskStatusParamsSchema.safeParse(req.params);
-    if (!parsed.success) {
-      return next(badRequest(formatIssues(parsed.error.issues)));
-    }
+  const authContext = extractAuthContext(req);
+  const data = await aiService.enqueueBackgroundRemoval(parsed.data, authContext);
 
-    const authContext = extractAuthContext(req);
-    const data = await aiService.getTaskById(parsed.data.id, authContext);
-    res.json({
-      success: true,
-      data,
-    });
-  } catch (err) {
-    next(err);
+  sendResponse(
+    res,
+    202,
+    "Background removal task enqueued successfully",
+    true,
+    null,
+    data
+  );
+});
+
+const getTaskStatus = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = getTaskStatusParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    throw new ApiError(400, formatIssues(parsed.error.issues));
   }
-};
+
+  const authContext = extractAuthContext(req);
+  const data = await aiService.getTaskById(parsed.data.id, authContext);
+
+  sendResponse(
+    res,
+    200,
+    "AI task status fetched successfully",
+    true,
+    null,
+    data
+  );
+});
 
 export const aiController = {
   generateSlogans,

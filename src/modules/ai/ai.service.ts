@@ -12,14 +12,7 @@ import {
   IAuthContext,
 } from "./ai.interface.js";
 import { sanitizeLogData } from "./ai.utils.js";
-
-type HttpError = Error & { statusCode?: number };
-
-const httpError = (statusCode: number, message: string): HttpError => {
-  const error = new Error(message) as HttpError;
-  error.statusCode = statusCode;
-  return error;
-};
+import { ApiError } from "../../utils/ApiError.js";
 
 class AiService {
   private geminiProvider = new GeminiProvider();
@@ -57,7 +50,7 @@ class AiService {
         existingTask.status === AiTaskStatus.PENDING ||
         existingTask.status === AiTaskStatus.PROCESSING
       ) {
-        throw httpError(409, "A slogan generation task with this idempotency key is currently processing");
+        throw new ApiError(409, "A slogan generation task with this idempotency key is currently processing");
       }
     }
 
@@ -99,7 +92,7 @@ class AiService {
       // 5. Fallback Provider: Groq
       if (slogans.length === 0) {
         if (!this.groqProvider.isConfigured()) {
-          throw httpError(503, "All AI providers are currently unconfigured or unavailable");
+          throw new ApiError(503, "All AI providers are currently unconfigured or unavailable");
         }
 
         const res = await this.groqProvider.generateSlogans(input);
@@ -142,7 +135,7 @@ class AiService {
         console.error("[AiService] Failed to record FAILED task status in DB:", dbErr);
       });
 
-      throw httpError(
+      throw new ApiError(
         error?.statusCode || 500,
         error?.message || "Failed to generate slogans. Please try again."
       );
@@ -236,7 +229,7 @@ class AiService {
     });
 
     if (!task) {
-      throw httpError(404, "AI task not found");
+      throw new ApiError(404, "AI task not found");
     }
 
     // Enforce creator ownership
@@ -249,7 +242,7 @@ class AiService {
     const isAdmin = authContext.role === "ADMIN";
 
     if ((task.userId || task.guestSessionId) && !isUserOwner && !isGuestOwner && !isAdmin) {
-      throw httpError(403, "Forbidden: You do not have permission to view this task result");
+      throw new ApiError(403, "Forbidden: You do not have permission to view this task result");
     }
 
     const { userId, guestSessionId, ...safeTask } = task;
