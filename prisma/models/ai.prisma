@@ -11,6 +11,8 @@ model AiTask {
   result         Json?
   errorCode      String?
   unitsCharged   Int           @default(0)
+  retryCount     Int           @default(0)
+  maxRetries     Int           @default(3)
   idempotencyKey String        @unique
   user           User?         @relation("UserAiTasks", fields: [userId], references: [id], onDelete: SetNull)
   guestSession   GuestSession? @relation("GuestAiTasks", fields: [guestSessionId], references: [id], onDelete: SetNull)

@@ -21,3 +21,19 @@ export const getTaskStatusParamsSchema = z.object({
   id: z.string().uuid("Invalid task ID format"),
 });
 
+export const createAiTaskSchema = z.object({
+  type: z.enum([
+    "CAPTION_SUGGESTION",
+    "BACKGROUND_GENERATION",
+    "BACKGROUND_REMOVAL",
+    "IMAGE_RESHAPE",
+  ]),
+  input: z.record(z.string(), z.any()),
+  idempotencyKey: z.string().trim().min(8).max(128).optional(),
+});
+
+export const removeBackgroundSchema = z.object({
+  imageUrl: z.string().url("Valid image URL is required"),
+  outputFormat: z.enum(["png", "webp"]).default("png"),
+  idempotencyKey: z.string().trim().min(8).max(128).optional(),
+});

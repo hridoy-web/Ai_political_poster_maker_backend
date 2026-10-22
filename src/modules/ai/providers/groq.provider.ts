@@ -26,10 +26,14 @@ export class GroqProvider implements IAiTextProvider {
       throw new Error("Groq API key is not configured");
     }
 
-    const count = input.count ?? 3;
+    const count = input.count ?? 4;
     const prompt = buildSloganPrompt(input);
 
-    const response = await this.client.chat.completions.create({
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Groq request timed out after 8s")), 8000)
+    );
+
+    const completionPromise = this.client.chat.completions.create({
       model: this.defaultModel,
       messages: [
         {
@@ -46,6 +50,7 @@ export class GroqProvider implements IAiTextProvider {
       temperature: 0.7,
     });
 
+    const response = await Promise.race([completionPromise, timeoutPromise]);
     const content = response.choices[0]?.message?.content?.trim() ?? "{}";
     const slogans = parseSlogansJson(content);
 
