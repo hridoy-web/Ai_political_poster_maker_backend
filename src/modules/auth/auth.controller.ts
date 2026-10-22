@@ -18,6 +18,8 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   let uploadedPublicId: string | null = null;
 
   try {
+
+    console.log(req.body)
     // Validate request body
     const validation = registerSchema.safeParse(req.body);
 
