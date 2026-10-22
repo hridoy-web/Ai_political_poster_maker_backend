@@ -21,6 +21,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     // Validate request body
     const validation = registerSchema.safeParse(req.body);
 
+    
     if (!validation.success) {
       throw new ApiError(
         400,
