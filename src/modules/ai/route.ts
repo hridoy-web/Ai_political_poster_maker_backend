@@ -52,10 +52,12 @@ const optionalAuth = async (req: Request, _res: Response, next: NextFunction) =>
  * POST /api/v1/ai/remove-background - Enqueue async background removal
  * GET  /api/v1/ai/tasks/:id         - Check status of specific AiTask (with ownership security)
  */
-router.post("/generate-slogans", optionalAuth, aiController.generateSlogans);
-router.post("/tasks", optionalAuth, aiController.createTask);
-router.post("/remove-background", optionalAuth, aiController.removeBackground);
-router.get("/tasks/:id", optionalAuth, aiController.getTaskStatus);
+router.use(optionalAuth);
+
+router.post("/generate-slogans", aiController.generateSlogans);
+router.post("/tasks", aiController.createTask);
+router.post("/remove-background", aiController.removeBackground);
+router.get("/tasks/:id", aiController.getTaskStatus);
 
 export const aiRoutes = router;
 export default router;
