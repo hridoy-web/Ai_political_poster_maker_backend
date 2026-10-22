@@ -7,11 +7,11 @@ export const cleanTemplateHtml = (html: string): string =>
       "*": ["class", "style", "data-field"],
       img: ["src", "alt"],
     },
-    allowedSchemes: ["data"],
+    allowedSchemes: ["data", "http", "https"],
     allowProtocolRelative: false,
   });
 
 export const cleanTemplateCss = (css: string): string =>
   css
     .replace(/@import[^;]+;/gi, "")
-    .replace(/url\((?!\s*["']?data:)[^)]*\)/gi, "");
+    .replace(/url\((?!\s*["']?(?:data:|https?:))[^)]*\)/gi, "");
