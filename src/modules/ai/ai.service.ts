@@ -7,32 +7,29 @@ import {
   IGenerateSlogansInput,
   ISloganGenerationResult,
   ISloganItem,
+  ICreateAiTaskInput,
+  IRemoveBackgroundInput,
+  IAuthContext,
 } from "./ai.interface.js";
-
-type HttpError = Error & { statusCode?: number };
-
-const httpError = (statusCode: number, message: string): HttpError => {
-  const error = new Error(message) as HttpError;
-  error.statusCode = statusCode;
-  return error;
-};
+import { sanitizeLogData } from "./ai.utils.js";
+import { ApiError } from "../../utils/ApiError.js";
 
 class AiService {
   private geminiProvider = new GeminiProvider();
   private groqProvider = new GroqProvider();
 
   /**
-   * Generates catchy political slogans with multi-provider failover (Gemini -> Groq).
-   * Automatically tracks the full AiTask lifecycle in PostgreSQL with strict idempotency.
+   * Generates campaign slogans using multi-provider failover (Gemini -> Groq).
+   * Note: Slogans are unmetered (unitsCharged: 0); billable units apply at final poster render.
    */
   public async generateSlogans(
     input: IGenerateSlogansInput,
-    authContext: { userId?: string; guestSessionId?: string } = {}
+    authContext: IAuthContext = {}
   ): Promise<ISloganGenerationResult> {
     const idempotencyKey =
       input.idempotencyKey || `slogan_${crypto.randomUUID()}`;
 
-    // 1. Check existing task with this idempotency key
+    // 1. Idempotency validation
     const existingTask = await prisma.aiTask.findUnique({
       where: { idempotencyKey },
     });
@@ -49,39 +46,25 @@ class AiService {
         };
       }
 
-      if (existingTask.status === AiTaskStatus.PENDING) {
-        throw httpError(409, "A slogan generation task with this idempotency key is currently processing");
+      if (
+        existingTask.status === AiTaskStatus.PENDING ||
+        existingTask.status === AiTaskStatus.PROCESSING
+      ) {
+        throw new ApiError(409, "A slogan generation task with this idempotency key is currently processing");
       }
     }
 
-    // 2. Validate foreign keys defensively so invalid headers never throw DB constraint errors
-    let validUserId: string | null = null;
-    let validGuestSessionId: string | null = null;
+    // 2. Defensive foreign key resolution
+    const { validUserId, validGuestSessionId } = await this.resolveValidForeignKeys(authContext);
 
-    if (authContext.userId) {
-      const userExists = await prisma.user.findUnique({
-        where: { id: authContext.userId },
-        select: { id: true },
-      });
-      if (userExists) validUserId = userExists.id;
-    }
-
-    if (authContext.guestSessionId) {
-      const guestExists = await prisma.guestSession.findUnique({
-        where: { id: authContext.guestSessionId },
-        select: { id: true },
-      });
-      if (guestExists) validGuestSessionId = guestExists.id;
-    }
-
-    // 3. Create PENDING AiTask record
+    // 3. Initialize task record
     const task = await prisma.aiTask.create({
       data: {
         idempotencyKey,
         userId: validUserId,
         guestSessionId: validGuestSessionId,
         type: AiTaskType.CAPTION_SUGGESTION,
-        status: AiTaskStatus.PENDING,
+        status: AiTaskStatus.PROCESSING,
         input: input as any,
         unitsCharged: 0,
       },
@@ -92,7 +75,7 @@ class AiService {
     let modelUsed = "";
 
     try {
-      // 3. Attempt generation using Gemini as primary provider
+      // 4. Primary Provider: Gemini
       if (this.geminiProvider.isConfigured()) {
         try {
           const res = await this.geminiProvider.generateSlogans(input);
@@ -101,15 +84,15 @@ class AiService {
           modelUsed = res.model;
         } catch (geminiErr: any) {
           console.warn(
-            `[AiService] Primary provider (Gemini) failed: ${geminiErr?.message}. Initiating Groq fallback...`
+            `[AiService] Primary provider failed: ${geminiErr?.message}. Initiating fallback provider...`
           );
         }
       }
 
-      // 4. Fallback to Groq if Gemini failed or was unconfigured
+      // 5. Fallback Provider: Groq
       if (slogans.length === 0) {
         if (!this.groqProvider.isConfigured()) {
-          throw httpError(503, "All AI providers are currently unconfigured or unavailable");
+          throw new ApiError(503, "All AI providers are currently unconfigured or unavailable");
         }
 
         const res = await this.groqProvider.generateSlogans(input);
@@ -118,8 +101,7 @@ class AiService {
         modelUsed = res.model;
       }
 
-      // 5. Update task to SUCCEEDED and charge units
-      const unitsCharged = 1;
+      // 6. Finalize successful task
       await prisma.aiTask.update({
         where: { id: task.id },
         data: {
@@ -127,7 +109,7 @@ class AiService {
           provider: providerUsed,
           model: modelUsed,
           result: { slogans } as any,
-          unitsCharged,
+          unitsCharged: 0,
           completedAt: new Date(),
         },
       });
@@ -137,12 +119,11 @@ class AiService {
         provider: providerUsed,
         model: modelUsed,
         slogans,
-        unitsCharged,
+        unitsCharged: 0,
       };
     } catch (error: any) {
-      console.error("[AiService] Slogan generation failed:", error);
+      console.error("[AiService] Slogan generation failed:", error?.message || error);
 
-      // Record failure in database
       await prisma.aiTask.update({
         where: { id: task.id },
         data: {
@@ -154,7 +135,7 @@ class AiService {
         console.error("[AiService] Failed to record FAILED task status in DB:", dbErr);
       });
 
-      throw httpError(
+      throw new ApiError(
         error?.statusCode || 500,
         error?.message || "Failed to generate slogans. Please try again."
       );
@@ -162,13 +143,78 @@ class AiService {
   }
 
   /**
-   * Retrieves status and result of a specific AI task.
+   * Enqueues an asynchronous AI task into the database worker queue.
    */
-  public async getTaskById(id: string) {
+  public async enqueueTask(
+    input: ICreateAiTaskInput,
+    authContext: IAuthContext = {}
+  ): Promise<{ taskId: string; status: AiTaskStatus; idempotencyKey: string }> {
+    const idempotencyKey =
+      input.idempotencyKey || `task_${crypto.randomUUID()}`;
+
+    const existing = await prisma.aiTask.findUnique({
+      where: { idempotencyKey },
+    });
+
+    if (existing) {
+      return {
+        taskId: existing.id,
+        status: existing.status,
+        idempotencyKey: existing.idempotencyKey,
+      };
+    }
+
+    const { validUserId, validGuestSessionId } = await this.resolveValidForeignKeys(authContext);
+
+    const task = await prisma.aiTask.create({
+      data: {
+        idempotencyKey,
+        userId: validUserId,
+        guestSessionId: validGuestSessionId,
+        type: input.type,
+        status: AiTaskStatus.PENDING,
+        input: sanitizeLogData(input.input) as any,
+        unitsCharged: 0,
+      },
+    });
+
+    return {
+      taskId: task.id,
+      status: task.status,
+      idempotencyKey: task.idempotencyKey,
+    };
+  }
+
+  /**
+   * Specialized enqueue for async background removal.
+   */
+  public async enqueueBackgroundRemoval(
+    input: IRemoveBackgroundInput,
+    authContext: IAuthContext = {}
+  ) {
+    return this.enqueueTask(
+      {
+        type: AiTaskType.BACKGROUND_REMOVAL,
+        input: {
+          imageUrl: input.imageUrl,
+          outputFormat: input.outputFormat || "png",
+        },
+        idempotencyKey: input.idempotencyKey,
+      },
+      authContext
+    );
+  }
+
+  /**
+   * Retrieves task execution status and result with creator ownership validation.
+   */
+  public async getTaskById(id: string, authContext: IAuthContext = {}) {
     const task = await prisma.aiTask.findUnique({
       where: { id },
       select: {
         id: true,
+        userId: true,
+        guestSessionId: true,
         type: true,
         status: true,
         provider: true,
@@ -183,10 +229,53 @@ class AiService {
     });
 
     if (!task) {
-      throw httpError(404, "AI task not found");
+      throw new ApiError(404, "AI task not found");
     }
 
-    return task;
+    // Enforce creator ownership
+    const isUserOwner = Boolean(task.userId && authContext.userId && task.userId === authContext.userId);
+    const isGuestOwner = Boolean(
+      task.guestSessionId &&
+      authContext.guestSessionId &&
+      task.guestSessionId === authContext.guestSessionId
+    );
+    const isAdmin = authContext.role === "ADMIN";
+
+    if ((task.userId || task.guestSessionId) && !isUserOwner && !isGuestOwner && !isAdmin) {
+      throw new ApiError(403, "Forbidden: You do not have permission to view this task result");
+    }
+
+    const { userId, guestSessionId, ...safeTask } = task;
+    return safeTask;
+  }
+
+  /**
+   * Validates foreign keys against active database rows to prevent constraint violations.
+   */
+  private async resolveValidForeignKeys(authContext: IAuthContext): Promise<{
+    validUserId: string | null;
+    validGuestSessionId: string | null;
+  }> {
+    let validUserId: string | null = null;
+    let validGuestSessionId: string | null = null;
+
+    if (authContext.userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: authContext.userId },
+        select: { id: true },
+      });
+      if (user) validUserId = user.id;
+    }
+
+    if (authContext.guestSessionId) {
+      const guest = await prisma.guestSession.findUnique({
+        where: { id: authContext.guestSessionId },
+        select: { id: true },
+      });
+      if (guest) validGuestSessionId = guest.id;
+    }
+
+    return { validUserId, validGuestSessionId };
   }
 }
 
