@@ -7,7 +7,8 @@
     "dev": "tsx watch --env-file=.env src/server.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/server.js",
-    "seed:templates": "tsx --env-file=.env src/seed/templates.seed.ts"
+    "seed:templates": "tsx --env-file=.env src/seed/templates.seed.ts",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
@@ -15,7 +16,7 @@
   "type": "module",
   "dependencies": {
     "@google/genai": "^2.30.0",
-    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.11.0",
@@ -42,6 +43,7 @@
     "@types/sanitize-html": "^2.16.2",
     "@types/sharp": "^0.31.1",
     "prisma": "^7.10.0",
+    "prisma": "^7.10.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
