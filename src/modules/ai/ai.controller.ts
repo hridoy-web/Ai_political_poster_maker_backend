@@ -1,64 +1,94 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
+import { ZodSchema, ZodIssue } from "zod";
+import { asyncHandler } from "../../utils/asyncHandler.js";
+import { ApiError } from "../../utils/ApiError.js";
+import sendResponse from "../../utils/sendResponse.js";
 import { aiService } from "./ai.service.js";
 import {
   generateSlogansSchema,
   getTaskStatusParamsSchema,
+  createAiTaskSchema,
+  removeBackgroundSchema,
 } from "./ai.validation.js";
 
-type HttpError = Error & { statusCode?: number };
-
-const badRequest = (message: string): HttpError => {
-  const error = new Error(message) as HttpError;
-  error.statusCode = 400;
-  return error;
-};
-
-const formatIssues = (issues: { path: PropertyKey[]; message: string }[]) =>
+const formatIssues = (issues: ZodIssue[]): string =>
   issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
+
+const validateData = <T>(schema: ZodSchema<T>, data: unknown): T => {
+  const parsed = schema.safeParse(data);
+  if (!parsed.success) {
+    throw new ApiError(400, formatIssues(parsed.error.issues));
+  }
+  return parsed.data;
+};
 
 const extractAuthContext = (req: Request) => {
   const userId = (req as any).user?.id as string | undefined;
-  const guestSessionId = (req.headers["x-guest-session-id"] as string) || req.cookies?.guest_session_id;
-  return { userId, guestSessionId };
+  const role = (req as any).user?.role as string | undefined;
+  const guestSessionId =
+    (req.headers["x-guest-session-id"] as string) || req.cookies?.guest_session_id;
+  return { userId, guestSessionId, role };
 };
 
-const generateSlogans = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const parsed = generateSlogansSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return next(badRequest(formatIssues(parsed.error.issues)));
-    }
+const generateSlogans = asyncHandler(async (req: Request, res: Response) => {
+  const input = validateData(generateSlogansSchema, req.body);
+  const data = await aiService.generateSlogans(input, extractAuthContext(req));
 
-    const authContext = extractAuthContext(req);
-    const data = await aiService.generateSlogans(parsed.data, authContext);
+  sendResponse(
+    res,
+    201,
+    "Slogans generated successfully",
+    true,
+    null,
+    data
+  );
+});
 
-    res.status(201).json({
-      success: true,
-      data,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
+const createTask = asyncHandler(async (req: Request, res: Response) => {
+  const input = validateData(createAiTaskSchema, req.body);
+  const data = await aiService.enqueueTask(input, extractAuthContext(req));
 
-const getTaskStatus = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const parsed = getTaskStatusParamsSchema.safeParse(req.params);
-    if (!parsed.success) {
-      return next(badRequest(formatIssues(parsed.error.issues)));
-    }
+  sendResponse(
+    res,
+    202,
+    "AI task enqueued successfully",
+    true,
+    null,
+    data
+  );
+});
 
-    const data = await aiService.getTaskById(parsed.data.id);
-    res.json({
-      success: true,
-      data,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
+const removeBackground = asyncHandler(async (req: Request, res: Response) => {
+  const input = validateData(removeBackgroundSchema, req.body);
+  const data = await aiService.enqueueBackgroundRemoval(input, extractAuthContext(req));
+
+  sendResponse(
+    res,
+    202,
+    "Background removal task enqueued successfully",
+    true,
+    null,
+    data
+  );
+});
+
+const getTaskStatus = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = validateData(getTaskStatusParamsSchema, req.params);
+  const data = await aiService.getTaskById(id, extractAuthContext(req));
+
+  sendResponse(
+    res,
+    200,
+    "AI task status fetched successfully",
+    true,
+    null,
+    data
+  );
+});
 
 export const aiController = {
   generateSlogans,
+  createTask,
+  removeBackground,
   getTaskStatus,
 };

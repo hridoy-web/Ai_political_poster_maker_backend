@@ -35,22 +35,28 @@ const optionalAuth = async (req: Request, _res: Response, next: NextFunction) =>
         select: { id: true, name: true, email: true },
       });
       if (user) {
-        (req as any).user = user;
+        (req as any).user = { ...user, role: (decoded as any)?.role };
       }
     }
     next();
   } catch (_err) {
-    // If token is invalid or expired, continue as guest rather than blocking public AI preview
+    // If token is invalid or expired, continue as guest rather than blocking preview
     next();
   }
 };
 
 /**
  * Routes:
- * POST /api/v1/ai/generate-slogans  - Generate AI slogans (supports user & guest)
- * GET  /api/v1/ai/tasks/:id         - Check status of specific AiTask
+ * POST /api/v1/ai/generate-slogans  - Generate AI slogans (fast, synchronous)
+ * POST /api/v1/ai/tasks             - Enqueue long-running AI task (returns taskId, status: PENDING)
+ * POST /api/v1/ai/remove-background - Enqueue async background removal
+ * GET  /api/v1/ai/tasks/:id         - Check status of specific AiTask (with ownership security)
  */
-router.post("/generate-slogans", optionalAuth, aiController.generateSlogans);
+router.use(optionalAuth);
+
+router.post("/generate-slogans", aiController.generateSlogans);
+router.post("/tasks", aiController.createTask);
+router.post("/remove-background", aiController.removeBackground);
 router.get("/tasks/:id", aiController.getTaskStatus);
 
 export const aiRoutes = router;
