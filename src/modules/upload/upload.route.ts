@@ -1,18 +1,7 @@
 import { Router } from "express";
 import { uploadController } from "./upload.controller.js";
-import multer from "multer";
+import { upload as multerUpload } from "../../middlewares/multer.middleware.js"; const router = Router();
 
-const router = Router();
-
-// Multer কনফিগারেশন (মেমরি স্টোরেজ ও ফাইল সাইজ লিমিট)
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: 5 * 1024 * 1024, // সর্বোচ্চ ৫ এমবি
-    },
-});
-
-// রাউটে upload.single("image") মিডলওয়্যারটি যুক্ত করা হলো
-router.post("/", upload.single("image"), uploadController);
+router.post("/", multerUpload.single("image"), uploadController);
 
 export default router;
