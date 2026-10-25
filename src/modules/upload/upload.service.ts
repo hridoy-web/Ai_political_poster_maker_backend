@@ -55,7 +55,6 @@ export const uploadImageService = async (
 
         return asset;
     } catch (dbError: any) {
-        // Atomic Rollback: Remove remote file if database creation failed
         if (uploadedPublicId) {
             await storageService.deleteFile(uploadedPublicId);
         }
@@ -79,4 +78,25 @@ export const validateAssetAccess = async (
         throw new ApiError(403, "Forbidden: You do not own this guest asset");
     }
     return asset;
+};
+
+export const deleteAssetService = async (
+    assetId: string,
+    userId?: string,
+    guestSessionId?: string
+) => {
+    const asset = await validateAssetAccess(assetId, userId, guestSessionId);
+
+    // Delete from Cloudinary storage
+    if (asset.storageKey) {
+        await storageService.deleteFile(asset.storageKey);
+    }
+
+    // Soft-delete in database
+    const updatedAsset = await prisma.asset.update({
+        where: { id: assetId },
+        data: { deletedAt: new Date() },
+    });
+
+    return updatedAsset;
 };
