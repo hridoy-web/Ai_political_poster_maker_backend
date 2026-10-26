@@ -35,7 +35,7 @@ function getOwnerContext(req: Request): IPosterOwnerContext {
     guestSessionId: req.guestSessionId,
   };
 }
-}
+
 
 // 1. POST /api/v1/posters - Create new poster draft
 const createPoster = asyncHandler(async (req: Request, res: Response) => {
