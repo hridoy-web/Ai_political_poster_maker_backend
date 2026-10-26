@@ -11,6 +11,7 @@ import { paymentRoutes } from "../modules/payment/payment.routes.js";
 import { walletRoutes } from "../modules/wallet/wallet.routes.js";
 import { transactionRoutes } from "../modules/transaction/transaction.routes.js";
 import { subscriptionRoutes } from "../modules/subscription/subscription.routes.js";
+import posterRoutes from "../modules/poster/route.js";
 
 const router = Router();
 

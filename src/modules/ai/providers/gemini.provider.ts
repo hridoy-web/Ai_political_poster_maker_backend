@@ -29,30 +29,40 @@ export class GeminiProvider implements IAiTextProvider {
     const count = input.count ?? 4;
     const prompt = buildSloganPrompt(input);
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Gemini request timed out after 8s")), 8000)
-    );
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+    }, 8000);
 
-    const generatePromise = this.client.models.generateContent({
-      model: this.defaultModel,
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        temperature: 0.7,
-      },
-    });
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.defaultModel,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          temperature: 0.7,
+          abortSignal: abortController.signal,
+        },
+      });
+      clearTimeout(timeoutId);
 
-    const response = await Promise.race([generatePromise, timeoutPromise]);
-    const text = response.text?.trim() ?? "{}";
-    const slogans = parseSlogansJson(text);
+      const text = response.text?.trim() ?? "{}";
+      const slogans = parseSlogansJson(text);
 
-    if (slogans.length === 0) {
-      throw new Error("Gemini returned empty or unparseable slogans JSON");
+      if (slogans.length === 0) {
+        throw new Error("Gemini returned empty or unparseable slogans JSON");
+      }
+
+      return {
+        slogans: slogans.slice(0, count),
+        model: this.defaultModel,
+      };
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (abortController.signal.aborted) {
+        throw new Error("Gemini request timed out after 8s (aborted)");
+      }
+      throw err;
     }
-
-    return {
-      slogans: slogans.slice(0, count),
-      model: this.defaultModel,
-    };
   }
 }
