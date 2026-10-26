@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { storageService } from "../services/storage/storage.service.js";
 import type { IPosterRenderJobPayload } from "../modules/poster/poster.interface.js";
 import crypto from "node:crypto";
+import { BillingService } from "../modules/payment/billing.service.js";
 
 /**
  * Worker handler for processing poster background rendering jobs asynchronously.
@@ -115,31 +116,14 @@ export async function processPosterRenderJob(
         },
       });
 
-      // Billing Refund: If authenticated user had credits reserved, refund them
+      // Billing Refund: If authenticated user had credits reserved, refund them via BillingService
       if (payload.userId) {
-        await prisma.$transaction(async (tx) => {
-          const wallet = await tx.creditWallet.upsert({
-            where: { userId: payload.userId! },
-            create: {
-              userId: payload.userId!,
-              balance: 1,
-            },
-            update: {
-              balance: { increment: 1 },
-            },
-          });
-
-          await tx.creditLedgerEntry.create({
-            data: {
-              userId: payload.userId!,
-              type: "REFUND",
-              amount: 1,
-              balanceAfter: wallet.balance,
-              idempotencyKey: `refund_${payload.idempotencyKey || crypto.randomUUID()}`,
-            },
-          });
-        });
-        console.log(`[PosterWorker] Refunded 1 credit to user ${payload.userId} due to render failure.`);
+        await BillingService.refundCredits(
+          payload.userId,
+          1,
+          `refund_${payload.idempotencyKey || crypto.randomUUID()}`
+        );
+        console.log(`[PosterWorker] Refunded 1 credit via BillingService to user ${payload.userId} due to render failure.`);
       }
     } catch (refundError) {
       console.error(`[PosterWorker] Failed to process billing refund for poster ${payload.posterId}:`, refundError);
