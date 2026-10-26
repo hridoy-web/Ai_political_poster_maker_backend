@@ -6,10 +6,15 @@ export const errorMiddleware: ErrorRequestHandler = (
   res,
   _next,
 ) => {
-  const error = err as Error & { statusCode?: number; errors?: any[] };
-  const statusCode = error.statusCode ?? 500;
-  const message = error.message || "Internal server error";
+  const error = err as Error & { statusCode?: number; errors?: any[]; code?: string };
+  let statusCode = error.statusCode ?? 500;
+  let message = error.message || "Internal server error";
 
+  // Handle unhandled Prisma unique constraint violations cleanly
+  if (error.code === "P2002") {
+    statusCode = 409;
+    message = "এই তথ্য (ইমেইল) দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট তৈরি করা হয়েছে।";
+  }
 
   console.error("🔥 Global Error Caught:", err);
 
