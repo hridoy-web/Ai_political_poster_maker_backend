@@ -54,7 +54,7 @@ export const uploadImageService = async (
         metadata = await sharp(processedBuffer).metadata();
     } catch (sharpError: any) {
         if (sharpError instanceof ApiError) throw sharpError;
-        throw new ApiError(400, `Corrupt or unsupported image file: ${sharpError.message}`);
+        throw new ApiError(400, "Corrupt or unsupported image file.");
     }
 
     let uploadedPublicId: string | null = null;
@@ -83,17 +83,19 @@ export const uploadImageService = async (
             try {
                 await storageService.deleteFile(uploadedPublicId);
             } catch (cleanupError) {
-                console.error("Critical: Orphaned Cloudinary asset cleanup failed during rollback:", cleanupError);
+                console.error("Critical: Orphaned Cloudinary asset cleanup failed during rollback.");
             }
         }
-        throw new ApiError(500, "Database persistence failed. Upload rolled back securely.", [], dbError.stack);
+        // Removed internal stack/path exposure for production security
+        throw new ApiError(500, "Database persistence failed. Upload rolled back securely.");
     }
 };
 
 export const validateAssetAccess = async (
     assetId: string,
     userId?: string,
-    guestSessionId?: string
+    guestSessionId?: string,
+    generateSignedUrl: boolean = false
 ) => {
     const asset = await prisma.asset.findUnique({ where: { id: assetId } });
     if (!asset) throw new ApiError(404, "Asset not found");
@@ -105,7 +107,17 @@ export const validateAssetAccess = async (
     if (asset.guestSessionId && guestSessionId && asset.guestSessionId !== guestSessionId) {
         throw new ApiError(403, "Forbidden: You do not own this guest asset");
     }
-    return asset;
+
+    // If requested, attach a limited-time signed URL for secure private viewing
+    let signedUrl = null;
+    if (generateSignedUrl && asset.storageKey) {
+        signedUrl = storageService.getSignedUrl(asset.storageKey, 3600); // Valid for 1 hour
+    }
+
+    return {
+        ...asset,
+        signedUrl,
+    };
 };
 
 export const deleteAssetService = async (
@@ -113,7 +125,7 @@ export const deleteAssetService = async (
     userId?: string,
     guestSessionId?: string
 ) => {
-    const asset = await validateAssetAccess(assetId, userId, guestSessionId);
+    const asset = await validateAssetAccess(assetId, userId, guestSessionId, false);
 
     if (asset.storageKey) {
         await storageService.deleteFile(asset.storageKey);
