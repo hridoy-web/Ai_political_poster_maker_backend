@@ -10,7 +10,7 @@ export const storageService = {
   async uploadBuffer(buffer: Buffer, folder: string): Promise<{ public_id: string; secure_url: string }> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { folder },
+        { folder, type: "authenticated" }, // Upload as authenticated/private asset by default
         (error, result) => {
           if (error) return reject(error);
           if (!result) return reject(new Error("Cloudinary upload failed: no result returned"));
@@ -32,14 +32,29 @@ export const storageService = {
     }
   },
 
-  // Added to support poster.service.ts calls
   getSecureUrl(publicId: string | null | undefined): string {
     if (!publicId) return "";
-    // If it's already a full URL, return it directly
     if (publicId.startsWith("http://") || publicId.startsWith("https://")) {
       return publicId;
     }
-    // Otherwise, generate Cloudinary secure URL from the public ID / storageKey
     return cloudinary.url(publicId, { secure: true });
+  },
+
+  /**
+   * Generates a limited-time signed URL for private/authenticated assets
+   * @param publicId Cloudinary public ID or storageKey
+   * @param expiresInSeconds Expiration time in seconds (default: 3600 seconds / 1 hour)
+   */
+  getSignedUrl(publicId: string, expiresInSeconds: number = 3600): string {
+    if (!publicId) return "";
+
+    const timestamp = Math.floor(Date.now() / 1000) + expiresInSeconds;
+
+    // Generate authenticated signed URL from Cloudinary SDK
+    return cloudinary.utils.private_download_url(publicId, "webp", {
+      resource_type: "image",
+      type: "authenticated",
+      expires_at: timestamp,
+    });
   },
 };
