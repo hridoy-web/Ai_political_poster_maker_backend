@@ -13,6 +13,7 @@ import { transactionRoutes } from "../modules/transaction/transaction.routes.js"
 import { subscriptionRoutes } from "../modules/subscription/subscription.routes.js";
 
 const router = Router();
+
 router.use("/upload", uploadRouter);
 router.use("/auth", authRouter);
 router.use("/user", userRouter);
@@ -20,6 +21,7 @@ router.use("/category", categoryRouter);
 router.use("/template", templateRouter);
 router.use("/bookmarks", bookmarkRouter);
 router.use("/ai", aiRouter);
+router.use("/posters", posterRoutes);
 
 // Dev 7: Billing, Packages, Payments, Wallets, Transactions, and Subscriptions
 router.use("/package", packageRoutes);
@@ -34,3 +36,4 @@ router.use("/subscription", subscriptionRoutes);
 router.use("/subscriptions", subscriptionRoutes);
 
 export default router;
+
