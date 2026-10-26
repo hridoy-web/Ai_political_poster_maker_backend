@@ -28,12 +28,13 @@ function validate<T>(schema: z.ZodType<T>, data: unknown): T {
   return result.data;
 }
 
-// Owner identity shared middleware-এ verify হয়ে request-এ রাখা হয়।
+// Owner identity is verified by shared middleware and stored on the request.
 function getOwnerContext(req: Request): IPosterOwnerContext {
   return {
     userId: req.user?.id,
     guestSessionId: req.guestSessionId,
   };
+}
 }
 
 // 1. POST /api/v1/posters - Create new poster draft
@@ -89,7 +90,15 @@ const duplicatePoster = asyncHandler(async (req: Request, res: Response) => {
 const triggerRender = asyncHandler(async (req: Request, res: Response) => {
   const { id } = validate(posterIdParamSchema, req.params);
   const input = validate(renderPosterSchema, req.body);
-  const result = await posterService.triggerRender(getOwnerContext(req), id, input);
+  const idempotencyKey =
+    input.idempotencyKey ||
+    (req.headers["idempotency-key"] as string) ||
+    (req.headers["x-idempotency-key"] as string);
+
+  const result = await posterService.triggerRender(getOwnerContext(req), id, {
+    ...input,
+    idempotencyKey,
+  });
   sendResponse(res, 202, "Poster render job accepted", true, null, result);
 });
 

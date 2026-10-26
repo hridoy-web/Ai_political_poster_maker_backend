@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { AnyZodObject } from 'zod/v3';
+import { ZodTypeAny } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 
-export const validateRequest = (schema: AnyZodObject) => {
+export const validateRequest = (schema: ZodTypeAny) => {
   return asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const parsed = await schema.safeParseAsync({
       body: req.body,
@@ -18,7 +18,10 @@ export const validateRequest = (schema: AnyZodObject) => {
       );
     }
 
-    req.body = parsed.data.body;
+    const data = parsed.data as { body?: any; query?: any; params?: any };
+    if (data?.body !== undefined) {
+      req.body = data.body;
+    }
     next();
   });
 };

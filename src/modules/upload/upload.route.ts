@@ -9,7 +9,7 @@ import { requireUserOrGuest } from "../../middlewares/guest.middleware.js";
 
 const router = Router();
 
-// Upload ও delete—দুই ক্ষেত্রেই আগে server-side identity যাচাই করি।
+// Verify identity before upload or delete routes.
 router.use(optionalAuth);
 router.use(requireUserOrGuest);
 

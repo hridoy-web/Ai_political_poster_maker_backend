@@ -5,7 +5,7 @@ import { requireUserOrGuest } from "../../middlewares/guest.middleware.js";
 
 const router = Router();
 
-// Poster route-ও shared middleware-এর verified user/guest identity ব্যবহার করে।
+// Poster routes use the verified user or guest identity from shared middleware.
 router.use(optionalAuth);
 router.use(requireUserOrGuest);
 

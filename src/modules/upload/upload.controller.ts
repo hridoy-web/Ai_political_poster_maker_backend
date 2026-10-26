@@ -5,7 +5,7 @@ import sendResponse from "../../utils/sendResponse.js";
 import { uploadImageService, deleteAssetService } from "./upload.service.js";
 
 export const uploadController = asyncHandler(async (req: Request, res: Response) => {
-  // Owner ID কেবল verified middleware থেকে নেওয়া হয়; request body বিশ্বাস করি না।
+  // Trust only identity verified by middleware, never owner IDs from the request body.
   const ownerUserId = req.user?.id;
   const guestSessionId = req.guestSessionId;
 
@@ -36,7 +36,7 @@ export const deleteAssetController = asyncHandler(
       throw new ApiError(400, "Asset ID is required");
     }
 
-    // Delete service যাচাই করা request identity দিয়ে ownership মিলিয়ে দেখে।
+    // The service checks asset ownership against the verified request identity.
     const deletedAsset = await deleteAssetService(
       assetId,
       req.user?.id,
