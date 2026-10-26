@@ -23,11 +23,13 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "express": "^5.3.0",
+    "file-type": "^22.2.0",
     "groq-sdk": "^1.6.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
     "pg": "^8.23.1",
     "sanitize-html": "^2.18.1",
+    "sharp": "^0.35.5",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -40,6 +42,7 @@
     "@types/node": "^22.20.5",
     "@types/pg": "^8.11.0",
     "@types/sanitize-html": "^2.16.2",
+    "@types/sharp": "^0.31.1",
     "prisma": "^7.10.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
