@@ -5,6 +5,15 @@ import { fileTypeFromBuffer } from "file-type";
 import crypto from "crypto";
 import { storageService } from "../../services/storage/storage.service.js";
 
+const ALLOWED_PURPOSES = [
+    "USER_UPLOAD",
+    "GENERATED_BACKGROUND",
+    "POSTER_OUTPUT",
+    "TEMPLATE_PREVIEW",
+    "TEMPLATE_ASSET",
+    "LOGO",
+] as const;
+
 export const uploadImageService = async (
     file: Express.Multer.File | undefined,
     body: { purpose: string; ownerUserId?: string; guestSessionId?: string }
@@ -13,32 +22,47 @@ export const uploadImageService = async (
         throw new ApiError(400, "Image file is required.");
     }
 
-    // 1. Magic Bytes Validation
+    const purpose = body.purpose || "USER_UPLOAD";
+    if (!ALLOWED_PURPOSES.includes(purpose as any)) {
+        throw new ApiError(400, `Invalid purpose. Allowed values are: ${ALLOWED_PURPOSES.join(", ")}`);
+    }
+
     const detectedType = await fileTypeFromBuffer(file.buffer);
     const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
     if (!detectedType || !allowedMimeTypes.includes(detectedType.mime)) {
         throw new ApiError(400, "Invalid file format. Only true JPEG, PNG, or WebP images are allowed.");
     }
 
-    // 2. Generate SHA-256 Checksum
     const checksum = crypto.createHash("sha256").update(file.buffer).digest("hex");
 
-    // 3. Process with Sharp
-    const processedBuffer = await sharp(file.buffer)
-        .resize(1920, 1080, { fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 85 })
-        .toBuffer();
+    let processedBuffer: Buffer;
+    let metadata: any;
 
-    const metadata = await sharp(processedBuffer).metadata();
+    try {
+        const image = sharp(file.buffer);
+        metadata = await image.metadata();
+
+        if ((metadata.width && metadata.width > 4000) || (metadata.height && metadata.height > 4000)) {
+            throw new ApiError(400, "Image dimensions exceed the maximum allowed limit of 4000x4000 pixels.");
+        }
+
+        processedBuffer = await image
+            .resize(1920, 1080, { fit: "inside", withoutEnlargement: true })
+            .webp({ quality: 85 })
+            .toBuffer();
+
+        metadata = await sharp(processedBuffer).metadata();
+    } catch (sharpError: any) {
+        if (sharpError instanceof ApiError) throw sharpError;
+        throw new ApiError(400, `Corrupt or unsupported image file: ${sharpError.message}`);
+    }
 
     let uploadedPublicId: string | null = null;
 
     try {
-        // 4. Cloudinary Upload
         const uploadResult = await storageService.uploadBuffer(processedBuffer, "political_posters_2");
         uploadedPublicId = uploadResult.public_id;
 
-        // 5. Database Persistence
         const asset = await prisma.asset.create({
             data: {
                 storageKey: uploadedPublicId,
@@ -47,7 +71,7 @@ export const uploadImageService = async (
                 width: metadata.width || 0,
                 height: metadata.height || 0,
                 checksum,
-                purpose: body.purpose as any,
+                purpose: purpose as any,
                 ownerUserId: body.ownerUserId || null,
                 guestSessionId: body.guestSessionId || null,
             },
@@ -56,7 +80,11 @@ export const uploadImageService = async (
         return asset;
     } catch (dbError: any) {
         if (uploadedPublicId) {
-            await storageService.deleteFile(uploadedPublicId);
+            try {
+                await storageService.deleteFile(uploadedPublicId);
+            } catch (cleanupError) {
+                console.error("Critical: Orphaned Cloudinary asset cleanup failed during rollback:", cleanupError);
+            }
         }
         throw new ApiError(500, "Database persistence failed. Upload rolled back securely.", [], dbError.stack);
     }
@@ -87,12 +115,10 @@ export const deleteAssetService = async (
 ) => {
     const asset = await validateAssetAccess(assetId, userId, guestSessionId);
 
-    // Delete from Cloudinary storage
     if (asset.storageKey) {
         await storageService.deleteFile(asset.storageKey);
     }
 
-    // Soft-delete in database
     const updatedAsset = await prisma.asset.update({
         where: { id: assetId },
         data: { deletedAt: new Date() },
