@@ -1,12 +1,82 @@
 import { prisma } from "../lib/prisma.js";
-import { AiTaskStatus, AiTaskType, CreditEntryType } from "@prisma/client";
+import { AiTaskStatus, AiTaskType } from "@prisma/client";
 import { aiService } from "../modules/ai/ai.service.js";
 import { IGenerateSlogansInput } from "../modules/ai/ai.interface.js";
 import { sanitizeLogData } from "../modules/ai/ai.utils.js";
 import cloudinary from "../config/cloudinary.js";
+import { BillingService } from "../modules/payment/billing.service.js";
+
+/**
+ * Classifies whether an execution error is transient/retryable (rate limits, 5xx, network drops, timeouts)
+ * or non-retryable (400 client error, invalid prompt, missing/invalid image URL, safety block).
+ */
+export function isRetryableError(error: any): boolean {
+  if (!error) return false;
+
+  const message = String(error.message || error).toLowerCase();
+  const status = Number(error.status || error.statusCode || error.http_code);
+
+  // 1. Explicit transient status codes (429 Too Many Requests, 408 Timeout, 5xx Server Errors) are retryable
+  if (status === 429 || status === 408 || (status >= 500 && status < 600)) {
+    return true;
+  }
+
+  // 2. Explicit transient message patterns are retryable
+  const retryablePatterns = [
+    "rate limit",
+    "429",
+    "500",
+    "502",
+    "503",
+    "504",
+    "timeout",
+    "aborterror",
+    "econnreset",
+    "etimedout",
+    "econnrefused",
+    "socket hang up",
+    "service unavailable",
+    "temporarily unavailable",
+    "overloaded",
+  ];
+
+  if (retryablePatterns.some((pattern) => message.includes(pattern))) {
+    return true;
+  }
+
+  // 3. Client errors (4xx) are deterministic and non-retryable
+  if (status >= 400 && status < 500) {
+    return false;
+  }
+
+  // 4. Common non-retryable domain error patterns
+  const nonRetryablePatterns = [
+    "missing imageurl",
+    "invalid image",
+    "unsupported",
+    "validation",
+    "bad request",
+    "unauthorized",
+    "forbidden",
+    "safety policy",
+    "blocked prompt",
+    "content violation",
+    "not found",
+    "background removal failed",
+    "no face",
+    "invalid url",
+  ];
+
+  if (nonRetryablePatterns.some((pattern) => message.includes(pattern))) {
+    return false;
+  }
+
+  return false;
+}
 
 /**
  * Refunds user credit units if a billable AI task fails definitively.
+ * Integrates directly with Hridoy's BillingService to guarantee immutable ledger consistency.
  */
 async function refundAiTaskCreditsIfCharged(task: {
   id: string;
@@ -16,36 +86,17 @@ async function refundAiTaskCreditsIfCharged(task: {
   if (!task.userId || task.unitsCharged <= 0) return;
 
   try {
-    await prisma.$transaction(async (tx) => {
-      const wallet = await tx.creditWallet.findUnique({
-        where: { userId: task.userId! },
-      });
+    await BillingService.refundCredits(
+      task.userId,
+      task.unitsCharged,
+      `ai-refund-${task.id}`
+    );
 
-      if (!wallet) return;
-
-      const newBalance = wallet.balance + task.unitsCharged;
-
-      await tx.creditWallet.update({
-        where: { userId: task.userId! },
-        data: { balance: newBalance },
-      });
-
-      await tx.creditLedgerEntry.create({
-        data: {
-          userId: task.userId!,
-          type: CreditEntryType.REFUND,
-          amount: task.unitsCharged,
-          balanceAfter: newBalance,
-          idempotencyKey: `ai-refund-${task.id}`,
-        },
-      });
-
-      console.log(
-        `[AiWorker] Automatically refunded ${task.unitsCharged} credit(s) to user ${task.userId} for failed task ${task.id}`
-      );
-    });
+    console.log(
+      `[AiWorker] Refunded ${task.unitsCharged} credit(s) via BillingService to user ${task.userId} for task ${task.id}`
+    );
   } catch (refundErr) {
-    console.error(`[AiWorker] Failed to refund credits for task ${task.id}:`, refundErr);
+    console.error(`[AiWorker] BillingService.refundCredits failed for task ${task.id}:`, refundErr);
   }
 }
 
@@ -97,7 +148,7 @@ export async function processAiTaskJob(taskId: string): Promise<boolean> {
       let format: string | undefined;
 
       try {
-        // Execute real Cloudinary AI Background Removal
+        // Execute Cloudinary AI Background Removal
         const uploadRes = await cloudinary.uploader.upload(imageUrl, {
           folder: "political_bg_removed",
           transformation: [
@@ -110,17 +161,15 @@ export async function processAiTaskJob(taskId: string): Promise<boolean> {
         height = uploadRes.height;
         format = uploadRes.format;
       } catch (clErr: any) {
-        console.warn(
-          `[AiWorker] Cloudinary AI background removal effect failed: ${clErr?.message}. Falling back to standard PNG upload.`
+        console.error(
+          `[AiWorker] Cloudinary AI background removal failed for ${sanitizeLogData(imageUrl)}:`,
+          clErr?.message || clErr
         );
-        const fallbackRes = await cloudinary.uploader.upload(imageUrl, {
-          folder: "political_bg_removed",
-          format: input.outputFormat || "png",
-        });
-        outputAssetUrl = fallbackRes.secure_url;
-        width = fallbackRes.width;
-        height = fallbackRes.height;
-        format = fallbackRes.format;
+        const err = new Error(
+          `Background removal failed: ${clErr?.message || "AI cutout service could not remove the background"}`
+        );
+        (err as any).status = clErr?.http_code || clErr?.status;
+        throw err;
       }
 
       await prisma.aiTask.update({
@@ -235,10 +284,11 @@ export async function processAiTaskJob(taskId: string): Promise<boolean> {
       select: { retryCount: true, maxRetries: true, userId: true, unitsCharged: true },
     });
 
+    const retryable = isRetryableError(error);
     const nextRetryCount = (current?.retryCount ?? 0) + 1;
     const maxRetries = current?.maxRetries ?? 3;
 
-    if (nextRetryCount < maxRetries) {
+    if (retryable && nextRetryCount < maxRetries) {
       await prisma.aiTask.update({
         where: { id: taskId },
         data: {
@@ -251,12 +301,16 @@ export async function processAiTaskJob(taskId: string): Promise<boolean> {
       });
       console.log(`[AiWorker] Task ${taskId} scheduled for retry (${nextRetryCount}/${maxRetries})`);
     } else {
+      const finalErrorCode = !retryable
+        ? `NON_RETRYABLE: ${(error?.message || "CLIENT_ERROR").slice(0, 80)}`
+        : `MAX_RETRIES_EXCEEDED: ${(error?.message || "SERVICE_ERROR").slice(0, 75)}`;
+
       await prisma.aiTask.update({
         where: { id: taskId },
         data: {
           status: AiTaskStatus.FAILED,
           retryCount: nextRetryCount,
-          errorCode: (error?.message || "MAX_RETRIES_EXCEEDED").slice(0, 100),
+          errorCode: finalErrorCode.slice(0, 100),
           completedAt: new Date(),
         },
       }).catch((dbErr) => {
@@ -272,7 +326,9 @@ export async function processAiTaskJob(taskId: string): Promise<boolean> {
         });
       }
 
-      console.error(`[AiWorker] Task ${taskId} exceeded max retries (${maxRetries}). Marked FAILED.`);
+      console.error(
+        `[AiWorker] Task ${taskId} terminated as FAILED (${!retryable ? "Non-retryable" : "Exceeded retries"}).`
+      );
     }
 
     return false;
