@@ -23,17 +23,23 @@ export const storageService = {
 
   async deleteFile(publicId: string): Promise<void> {
     try {
-      await cloudinary.uploader.destroy(publicId);
-    } catch (err) {
-      console.error("Failed to delete orphaned file from Cloudinary during rollback:", err);
+      const result = await cloudinary.uploader.destroy(publicId);
+      if (result.result !== "ok" && result.result !== "not found") {
+        throw new Error(`Cloudinary deletion failed with status: ${result.result}`);
+      }
+    } catch (err: any) {
+      throw new Error(`Failed to delete file from Cloudinary: ${err.message}`);
     }
   },
 
-  getSecureUrl(storageKey: string | null | undefined): string | null {
-    if (!storageKey) return null;
-    if (storageKey.startsWith("http://") || storageKey.startsWith("https://")) {
-      return storageKey;
+  // Added to support poster.service.ts calls
+  getSecureUrl(publicId: string | null | undefined): string {
+    if (!publicId) return "";
+    // If it's already a full URL, return it directly
+    if (publicId.startsWith("http://") || publicId.startsWith("https://")) {
+      return publicId;
     }
-    return cloudinary.url(storageKey, { secure: true });
+    // Otherwise, generate Cloudinary secure URL from the public ID / storageKey
+    return cloudinary.url(publicId, { secure: true });
   },
 };
