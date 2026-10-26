@@ -90,6 +90,15 @@ export const registerUser = async (
 
   validatePasswordBytes(password);
 
+  const existingUser = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: { id: true },
+  });
+
+  if (existingUser) {
+    throw new ApiError(409, "User already exists with this email");
+  }
+
   const passwordHash = await hashPassword(password);
 
   // UPDATED: user, Asset ও avatar relation একই transaction-এ লেখা হয়।
