@@ -1,27 +1,45 @@
-import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
+import { prisma } from '../../lib/prisma.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { initSSLCommerzPayment, validateSSLCommerzPayment } from './sslcommerz.adapter.js';
 
-const prisma = new PrismaClient();
-
 export const initiatePaymentSession = async (
     userId: string,
-    data: { packageId?: string; customAmount?: number }
+    data: { packageId?: string; customAmount?: number; paymentMethod?: string }
 ) => {
     let amount = 0;
     let packageId: string | null = null;
 
     if (data.packageId) {
-        const pkg = await prisma.package.findUnique({ where: { id: data.packageId } });
-        if (!pkg) throw new ApiError(404, 'Selected package not found');
-        amount = Number(pkg.price);
-        packageId = pkg.id;
+        const pkg = await prisma.package.findFirst({
+            where: {
+                OR: [
+                    { id: data.packageId },
+                    { code: data.packageId },
+                ],
+            },
+        });
+
+        if (pkg) {
+            amount = Number(pkg.price);
+            packageId = pkg.id;
+        } else if (data.customAmount) {
+            if (data.customAmount < 20) throw new ApiError(400, 'Minimum recharge amount is 20 BDT');
+            amount = data.customAmount;
+        } else {
+            throw new ApiError(404, 'Selected package not found');
+        }
     } else if (data.customAmount) {
         if (data.customAmount < 20) throw new ApiError(400, 'Minimum recharge amount is 20 BDT');
         amount = data.customAmount;
     } else {
         throw new ApiError(400, 'Either packageId or customAmount is required');
     }
+
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true },
+    });
 
     const tranId = `TRAN_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
@@ -38,26 +56,68 @@ export const initiatePaymentSession = async (
         },
     });
 
+    const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+
     const sslRes = await initSSLCommerzPayment({
         total_amount: amount,
         tran_id: tranId,
-        success_url: `${process.env.BACKEND_URL}/api/v1/payments/sslcommerz/success`,
-        fail_url: `${process.env.BACKEND_URL}/api/v1/payments/sslcommerz/fail`,
-        cancel_url: `${process.env.BACKEND_URL}/api/v1/payments/sslcommerz/cancel`,
-        ipn_url: `${process.env.BACKEND_URL}/api/v1/payments/webhook/sslcommerz`,
-        cus_name: 'PosterAI User',
-        cus_email: 'user@posterai.com',
+        success_url: `${backendUrl}/api/v1/payments/sslcommerz/success`,
+        fail_url: `${backendUrl}/api/v1/payments/sslcommerz/fail`,
+        cancel_url: `${backendUrl}/api/v1/payments/sslcommerz/cancel`,
+        ipn_url: `${backendUrl}/api/v1/payments/webhook/sslcommerz`,
+        cus_name: user?.name || 'PosterAI User',
+        cus_email: user?.email || 'user@posterai.com',
         cus_phone: '01700000000',
+        paymentMethod: data.paymentMethod,
     });
 
     if (!sslRes?.GatewayPageURL) {
         throw new ApiError(500, 'Failed to initiate payment session with SSLCommerz');
     }
 
-    return { GatewayPageURL: sslRes.GatewayPageURL, tranId };
+    let targetUrl = sslRes.GatewayPageURL;
+
+    // Direct Sandbox Simulator Routing:
+    // If the user selected a direct channel like bKash or Nagad, route directly to its
+    // sandbox OTP/PIN simulator from sslRes.desc instead of the generic multi-tab EasyCheckOut page.
+    if (data.paymentMethod && Array.isArray(sslRes.desc)) {
+        const method = data.paymentMethod.toLowerCase().trim();
+        // If user selected a direct wallet (like bKash or Nagad), route directly to its sandbox simulator.
+        // For 'card' / 'cards', GatewayPageURL provides the full choice of Visa, Mastercard, DBBL Nexus, etc.
+        if (method !== 'card' && method !== 'cards') {
+            const matchedGw = sslRes.desc.find(
+                (item: any) =>
+                    item.gw?.toLowerCase() === method ||
+                    item.name?.toLowerCase() === method ||
+                    item.gw?.toLowerCase().includes(method) ||
+                    item.name?.toLowerCase().includes(method)
+            );
+
+            if (matchedGw?.redirectGatewayURL) {
+                targetUrl = matchedGw.redirectGatewayURL;
+            }
+        }
+    }
+
+    return { GatewayPageURL: targetUrl, tranId };
 };
 
 export const verifyAndFulfillPayment = async (valId: string, tranId: string) => {
+    // 1. Webhook Deduplication check
+    const existingWebhook = await prisma.paymentWebhookEvent.findUnique({
+        where: {
+            provider_providerEventId: {
+                provider: 'SSLCOMMERZ',
+                providerEventId: valId || tranId,
+            },
+        },
+    });
+
+    if (existingWebhook && existingWebhook.status === 'PROCESSED') {
+        const existingPayment = await prisma.payment.findUnique({ where: { tranId } });
+        return existingPayment;
+    }
+
     const validationRes = await validateSSLCommerzPayment(valId);
 
     if (validationRes.status !== 'VALID' && validationRes.status !== 'VALIDATED') {
@@ -73,6 +133,7 @@ export const verifyAndFulfillPayment = async (valId: string, tranId: string) => 
         if (!payment) throw new ApiError(404, 'Payment record not found');
         if (payment.status === 'SUCCEEDED') return payment; 
 
+        // Amount & Currency Verification
         if (Number(payment.amount) !== Number(validationRes.currency_amount)) {
             throw new ApiError(400, 'Transaction amount discrepancy detected');
         }
@@ -132,7 +193,7 @@ export const verifyAndFulfillPayment = async (valId: string, tranId: string) => 
             update: { balance: { increment: creditsToGrant } },
         });
 
-        // CreditLedgerEntry
+        // CreditLedgerEntry (Immutable Audit Record)
         await tx.creditLedgerEntry.create({
             data: {
                 userId: payment.userId,
@@ -143,6 +204,60 @@ export const verifyAndFulfillPayment = async (valId: string, tranId: string) => 
             },
         });
 
+        // Money Wallet (Money Balance) & Ledger Entry
+        const moneyWallet = await tx.wallet.upsert({
+            where: { userId: payment.userId },
+            create: { userId: payment.userId, balance: payment.amount, currency: 'BDT' },
+            update: { balance: { increment: payment.amount } },
+        });
+
+        await tx.moneyLedgerEntry.create({
+            data: {
+                userId: payment.userId,
+                type: 'RECHARGE',
+                amount: payment.amount,
+                currency: 'BDT',
+                balanceAfter: moneyWallet.balance,
+                idempotencyKey: `LEDGER_MONEY_${payment.id}`,
+            },
+        });
+
+        // Record Webhook Event as PROCESSED
+        const payloadHash = crypto
+            .createHash('sha256')
+            .update(JSON.stringify(validationRes))
+            .digest('hex');
+
+        await tx.paymentWebhookEvent.upsert({
+            where: {
+                provider_providerEventId: {
+                    provider: 'SSLCOMMERZ',
+                    providerEventId: valId || tranId,
+                },
+            },
+            create: {
+                paymentId: payment.id,
+                provider: 'SSLCOMMERZ',
+                providerEventId: valId || tranId,
+                signatureValid: true,
+                payloadHash,
+                status: 'PROCESSED',
+                processedAt: new Date(),
+            },
+            update: {
+                status: 'PROCESSED',
+                processedAt: new Date(),
+            },
+        });
+
         return updatedPayment;
+    });
+};
+
+export const handlePaymentFailureInDB = async (tranId: string, status: 'FAILED' | 'CANCELLED') => {
+    if (!tranId) return null;
+    return await prisma.payment.updateMany({
+        where: { tranId, status: 'PENDING' },
+        data: { status },
     });
 };

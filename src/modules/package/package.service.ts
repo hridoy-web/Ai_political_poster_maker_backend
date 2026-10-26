@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { ApiError } from '../../utils/ApiError.js';
-
-const prisma = new PrismaClient();
 
 export const getPublishedPackagesFromDB = async () => {
   const now = new Date();

@@ -3,15 +3,25 @@ import { CorsOptions } from "cors";
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
+  "https://sandbox.sslcommerz.com",
+  "https://securepay.sslcommerz.com",
   process.env.CLIENT_URL,
+  process.env.FRONTEND_URL,
 ].filter(Boolean) as string[];
 
 export const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (
+      !origin ||
+      origin === "null" ||
+      allowedOrigins.includes(origin) ||
+      origin.includes("sslcommerz.com") ||
+      origin.startsWith("http://localhost:") ||
+      origin.startsWith("http://127.0.0.1:")
+    ) {
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      callback(null, false);
     }
   },
   credentials: true,
