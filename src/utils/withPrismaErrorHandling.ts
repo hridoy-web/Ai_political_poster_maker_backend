@@ -12,16 +12,27 @@ const getErrorCode = (error: unknown): string | undefined => {
 };
 
 const getUniqueTarget = (error: unknown): string => {
-  if (typeof error !== "object" || error === null || !("meta" in error)) {
+  if (typeof error !== "object" || error === null) {
     return "";
   }
 
-  const meta = (error as { meta?: { target?: unknown } }).meta;
-  const target = meta?.target;
+  const errObj = error as {
+    meta?: { target?: unknown; constraint?: unknown };
+    message?: string;
+  };
 
-  return Array.isArray(target)
+  const target = errObj.meta?.target;
+  const constraint = errObj.meta?.constraint;
+  const message = errObj.message || "";
+
+  const targetStr = Array.isArray(target)
     ? target.join(",").toLowerCase()
     : String(target ?? "").toLowerCase();
+
+  const constraintStr = String(constraint ?? "").toLowerCase();
+  const messageStr = message.toLowerCase();
+
+  return `${targetStr} ${constraintStr} ${messageStr}`;
 };
 
 export const withPrismaErrorHandling = async <T>(
