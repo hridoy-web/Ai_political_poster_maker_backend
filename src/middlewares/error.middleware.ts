@@ -6,11 +6,18 @@ export const errorMiddleware: ErrorRequestHandler = (
   res,
   _next,
 ) => {
-  const error = err as Error & { statusCode?: number };
+  const error = err as Error & { statusCode?: number; errors?: any[] };
   const statusCode = error.statusCode ?? 500;
+  const message = error.message || "Internal server error";
+
+
+  console.error("🔥 Global Error Caught:", err);
 
   res.status(statusCode).json({
     success: false,
-    message: statusCode === 500 ? "Internal server error" : error.message,
+    message: message,
+
+    ...(error.errors && error.errors.length > 0 && { errors: error.errors }),
+    errorDetails: process.env.NODE_ENV === "development" ? err.stack : undefined,
   });
 };
