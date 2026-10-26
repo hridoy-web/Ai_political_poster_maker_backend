@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma.js";
-import { AiTaskStatus } from "@prisma/client";
+import { AiTaskStatus, CreditEntryType } from "@prisma/client";
 
 /**
  * Summary metrics of maintenance cleanup execution.
@@ -16,33 +16,87 @@ export interface ICleanupMaintenanceResult {
 }
 
 /**
+ * Helper to refund credits for billable AI tasks that definitively timed out or failed.
+ */
+async function refundTaskCredits(task: { id: string; userId: string | null; unitsCharged: number }, reason: string): Promise<void> {
+  if (!task.userId || task.unitsCharged <= 0) return;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const wallet = await tx.creditWallet.findUnique({
+        where: { userId: task.userId! },
+      });
+      if (wallet) {
+        const newBalance = wallet.balance + task.unitsCharged;
+        await tx.creditWallet.update({
+          where: { userId: task.userId! },
+          data: { balance: newBalance },
+        });
+        await tx.creditLedgerEntry.create({
+          data: {
+            userId: task.userId!,
+            type: CreditEntryType.REFUND,
+            amount: task.unitsCharged,
+            balanceAfter: newBalance,
+            idempotencyKey: `ai-cron-${reason}-${task.id}`,
+          },
+        });
+        console.log(`[Maintenance CronJob] Refunded ${task.unitsCharged} credits to user ${task.userId} (${reason})`);
+      }
+    });
+  } catch (err) {
+    console.error(`[Maintenance CronJob] Failed refund for task ${task.id}:`, err);
+  }
+}
+
+/**
  * Scans for AI tasks remaining in PENDING past the cutoff threshold (default: 30m).
- * Safely marks them FAILED to avoid infinite loading in user dashboards.
+ * Safely marks them FAILED to avoid infinite loading in user dashboards and refunds if billable.
  */
 export async function cleanupTimedOutAiTasks(timeoutMinutes: number = 30): Promise<number> {
   const cutoffTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
 
-  const result = await prisma.aiTask.updateMany({
+  const pendingTimedOut = await prisma.aiTask.findMany({
     where: {
       status: AiTaskStatus.PENDING,
-      createdAt: {
-        lt: cutoffTime,
-      },
+      createdAt: { lt: cutoffTime },
     },
-    data: {
-      status: AiTaskStatus.FAILED,
-      errorCode: "AI_TASK_TIMED_OUT",
-      completedAt: new Date(),
+    select: {
+      id: true,
+      userId: true,
+      unitsCharged: true,
     },
   });
 
-  return result.count;
+  let timedOutCount = 0;
+
+  for (const task of pendingTimedOut) {
+    const claim = await prisma.aiTask.updateMany({
+      where: {
+        id: task.id,
+        status: AiTaskStatus.PENDING, // Atomic check
+      },
+      data: {
+        status: AiTaskStatus.FAILED,
+        errorCode: "AI_TASK_TIMED_OUT",
+        completedAt: new Date(),
+      },
+    });
+
+    if (claim.count > 0) {
+      timedOutCount++;
+      await refundTaskCredits(task, "timeout");
+    }
+  }
+
+  return timedOutCount;
 }
 
 /**
  * Detects tasks stuck in PROCESSING due to worker crashes or sudden pod terminations.
  * If retries remain: resets to PENDING so another worker can retry.
- * If maxRetries exceeded: marks as FAILED permanently.
+ * If maxRetries exceeded: marks as FAILED permanently and refunds if billable.
+ * Uses atomic CAS (compare-and-swap) to avoid race conditions with concurrently finishing workers.
  */
 export async function recoverStuckProcessingAiTasks(
   stuckThresholdMinutes: number = 15
@@ -56,6 +110,8 @@ export async function recoverStuckProcessingAiTasks(
     },
     select: {
       id: true,
+      userId: true,
+      unitsCharged: true,
       retryCount: true,
       maxRetries: true,
     },
@@ -66,27 +122,30 @@ export async function recoverStuckProcessingAiTasks(
 
   for (const task of stuckTasks) {
     const nextRetry = task.retryCount + 1;
-    if (nextRetry < task.maxRetries) {
-      await prisma.aiTask.update({
-        where: { id: task.id },
-        data: {
-          status: AiTaskStatus.PENDING,
-          retryCount: nextRetry,
-          errorCode: "RECOVERED_FROM_WORKER_CRASH",
-        },
-      });
-      recoveredCount++;
-    } else {
-      await prisma.aiTask.update({
-        where: { id: task.id },
-        data: {
-          status: AiTaskStatus.FAILED,
-          retryCount: nextRetry,
-          errorCode: "MAX_RETRIES_EXCEEDED_AFTER_CRASH",
-          completedAt: new Date(),
-        },
-      });
-      failedCount++;
+    const isExceeded = nextRetry >= task.maxRetries;
+
+    // Atomic state update: ensures we only touch the task if it is STILL in PROCESSING state
+    const claim = await prisma.aiTask.updateMany({
+      where: {
+        id: task.id,
+        status: AiTaskStatus.PROCESSING,
+      },
+      data: {
+        status: isExceeded ? AiTaskStatus.FAILED : AiTaskStatus.PENDING,
+        retryCount: nextRetry,
+        errorCode: isExceeded ? "MAX_RETRIES_EXCEEDED_AFTER_CRASH" : "RECOVERED_FROM_WORKER_CRASH",
+        completedAt: isExceeded ? new Date() : null,
+      },
+    });
+
+    // Only update metrics and refund if this cron run actually performed the transition
+    if (claim.count > 0) {
+      if (isExceeded) {
+        failedCount++;
+        await refundTaskCredits(task, "crash-exceeded");
+      } else {
+        recoveredCount++;
+      }
     }
   }
 
