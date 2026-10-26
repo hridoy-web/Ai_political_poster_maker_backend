@@ -6,7 +6,11 @@ const bookmarkRoutes = Router();
 
 bookmarkRoutes.use(verifyToken);
 
+// POST/DELETE /api/v1/bookmarks/:templateId
+bookmarkRoutes.post("/:templateId", bookmarkController.addBookmark);
+
 bookmarkRoutes.post("/", bookmarkController.addBookmark);
+
 bookmarkRoutes.get("/", bookmarkController.getMyBookmarks);
 bookmarkRoutes.delete("/:templateId", bookmarkController.removeBookmark);
 

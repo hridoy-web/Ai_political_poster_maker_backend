@@ -7,7 +7,8 @@ import { bookmarkService } from "./bookmark.service.js";
 // Bookmark add
 const addBookmark = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
-  const { templateId } = req.body;
+ 
+  const templateId = req.params.templateId || req.body.templateId;
 
   if (!userId) {
     throw new ApiError(401, "Unauthorized user");
@@ -20,12 +21,13 @@ const addBookmark = asyncHandler(async (req: Request, res: Response) => {
   const result = await bookmarkService.addBookmark(userId, templateId);
 
   sendResponse(
-    res, 
+    res,
     201,
     "Template bookmarked successfully",
     true,
-    null, 
-    result);
+    null,
+    result
+  );
 });
 
 // Bookmark remove
