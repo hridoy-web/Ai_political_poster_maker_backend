@@ -1,13 +1,16 @@
 import cors from "cors";
 import express from "express";
+import cookieParser  from 'cookie-parser'
 import apiRoutes from "./routes/routes.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
 import { notFoundMiddleware } from "./middlewares/notFound.middleware.js";
+import { corsOptions } from "./config/cors.js";
 
 const app = express();
 
-app.use(cors());
+app.use(cors(corsOptions))
 app.use(express.json());
+app.use(cookieParser())
 
 app.get("/", (_req, res) => {
   res.json({ message: "AI Poster Maker API is running" });
