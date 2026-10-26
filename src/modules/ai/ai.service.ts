@@ -143,6 +143,60 @@ class AiService {
   }
 
   /**
+   * Directly executes AI slogan generation for an existing queued AiTask.
+   * Updates the existing task in-place to SUCCEEDED without creating duplicate records.
+   */
+  public async executeTaskSloganGeneration(
+    taskId: string,
+    input: IGenerateSlogansInput
+  ): Promise<ISloganItem[]> {
+    let slogans: ISloganItem[] = [];
+    let providerUsed = "gemini";
+    let modelUsed = "unknown";
+
+    // 1. Primary Provider: Gemini
+    if (this.geminiProvider.isConfigured()) {
+      try {
+        const res = await this.geminiProvider.generateSlogans(input);
+        slogans = res.slogans;
+        providerUsed = "gemini";
+        modelUsed = res.model;
+      } catch (geminiErr: any) {
+        console.warn(
+          `[AiService] Primary provider failed for task ${taskId}: ${geminiErr?.message}. Initiating fallback provider...`
+        );
+      }
+    }
+
+    // 2. Fallback Provider: Groq
+    if (slogans.length === 0) {
+      if (!this.groqProvider.isConfigured()) {
+        throw new ApiError(503, "All AI providers are currently unconfigured or unavailable");
+      }
+
+      const res = await this.groqProvider.generateSlogans(input);
+      slogans = res.slogans;
+      providerUsed = "groq";
+      modelUsed = res.model;
+    }
+
+    // 3. Atomically update existing task to SUCCEEDED
+    await prisma.aiTask.update({
+      where: { id: taskId },
+      data: {
+        status: AiTaskStatus.SUCCEEDED,
+        provider: providerUsed,
+        model: modelUsed,
+        result: { slogans } as any,
+        unitsCharged: 0,
+        completedAt: new Date(),
+      },
+    });
+
+    return slogans;
+  }
+
+  /**
    * Enqueues an asynchronous AI task into the database worker queue.
    */
   public async enqueueTask(
@@ -241,7 +295,9 @@ class AiService {
     );
     const isAdmin = authContext.role === "ADMIN";
 
-    if ((task.userId || task.guestSessionId) && !isUserOwner && !isGuestOwner && !isAdmin) {
+    // UPDATED: আগের condition-এ userId ও guestSessionId দুটোই null হলে ownership check বাদ পড়ত।
+    // এখন task-এর owner বা admin না হলে access বন্ধ থাকবে।
+    if (!isUserOwner && !isGuestOwner && !isAdmin) {
       throw new ApiError(403, "Forbidden: You do not have permission to view this task result");
     }
 
