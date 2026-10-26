@@ -241,7 +241,9 @@ class AiService {
     );
     const isAdmin = authContext.role === "ADMIN";
 
-    if ((task.userId || task.guestSessionId) && !isUserOwner && !isGuestOwner && !isAdmin) {
+    // UPDATED: আগের condition-এ userId ও guestSessionId দুটোই null হলে ownership check বাদ পড়ত।
+    // এখন task-এর owner বা admin না হলে access বন্ধ থাকবে।
+    if (!isUserOwner && !isGuestOwner && !isAdmin) {
       throw new ApiError(403, "Forbidden: You do not have permission to view this task result");
     }
 

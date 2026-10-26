@@ -4,6 +4,8 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import sendResponse from "../../utils/sendResponse.js";
 import { prisma } from "../../config/db.js";
 import cloudinary, { uploadOnCloudinary } from "../../config/cloudinary.js";
+import { cookieOptions } from "../auth/auth.service.js";
+import { anonymizeUserAccount } from "./user.service.js";
 
 export const getCurrentUser = asyncHandler(
   async (req: Request, res: Response) => {
@@ -180,5 +182,28 @@ export const updateProfile = asyncHandler(
 
       throw error;
     }
+  },
+);
+
+export const deleteCurrentUser = asyncHandler(
+  async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new ApiError(401, "Unauthorized");
+    }
+
+    await anonymizeUserAccount(req.user.id);
+
+    // Account anonymize সফল হলে user ও guest—দুই cookie-ই clear করি।
+    res.clearCookie("token", cookieOptions);
+    res.clearCookie("guest_session_id", cookieOptions);
+
+    return sendResponse(
+      res,
+      200,
+      "Account deleted and personal data anonymized",
+      true,
+      null,
+      null,
+    );
   },
 );

@@ -6,7 +6,11 @@ import { CategoryRoutes as categoryRouter } from "../modules/category/category.r
 import { TemplateRoutes as templateRouter } from "../modules/template/template.routes.js";
 import aiRouter from "../modules/ai/route.js";
 import bookmarkRouter from "../modules/bookmark/bookmark.route.js";
+<<<<<<< HEAD
 import posterRoutes from "../modules/poster/route.js";
+=======
+import guestRouter from "../modules/guest/guest.route.js";
+>>>>>>> d329304 (feat: secure auth and guest ownership flows)
 
 const router = Router();
 
@@ -17,7 +21,11 @@ router.use("/category", categoryRouter);
 router.use("/template", templateRouter);
 router.use("/bookmarks", bookmarkRouter);
 router.use("/ai", aiRouter);
+<<<<<<< HEAD
 router.use("/posters", posterRoutes);
 
+=======
+router.use("/guest", guestRouter);
+>>>>>>> d329304 (feat: secure auth and guest ownership flows)
 export default router;
 
