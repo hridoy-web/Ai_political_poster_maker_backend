@@ -28,4 +28,12 @@ export const storageService = {
       console.error("Failed to delete orphaned file from Cloudinary during rollback:", err);
     }
   },
+
+  getSecureUrl(storageKey: string | null | undefined): string | null {
+    if (!storageKey) return null;
+    if (storageKey.startsWith("http://") || storageKey.startsWith("https://")) {
+      return storageKey;
+    }
+    return cloudinary.url(storageKey, { secure: true });
+  },
 };

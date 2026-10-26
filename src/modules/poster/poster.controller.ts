@@ -29,12 +29,11 @@ function validate<T>(schema: z.ZodType<T>, data: unknown): T {
 }
 
 /**
- * Extracts authenticated user or guest session from request headers/cookies.
+ * Extracts authenticated user or verified guest session from request context.
  */
 function getOwnerContext(req: Request): IPosterOwnerContext {
   const userId = req.user?.id;
-  const guestSessionId =
-    (req.headers["x-guest-session-id"] as string) || req.cookies?.guest_session_id;
+  const guestSessionId = req.guestSessionId;
 
   return { userId, guestSessionId };
 }
@@ -92,7 +91,15 @@ const duplicatePoster = asyncHandler(async (req: Request, res: Response) => {
 const triggerRender = asyncHandler(async (req: Request, res: Response) => {
   const { id } = validate(posterIdParamSchema, req.params);
   const input = validate(renderPosterSchema, req.body);
-  const result = await posterService.triggerRender(getOwnerContext(req), id, input);
+  const idempotencyKey =
+    input.idempotencyKey ||
+    (req.headers["idempotency-key"] as string) ||
+    (req.headers["x-idempotency-key"] as string);
+
+  const result = await posterService.triggerRender(getOwnerContext(req), id, {
+    ...input,
+    idempotencyKey,
+  });
   sendResponse(res, 202, "Poster render job accepted", true, null, result);
 });
 

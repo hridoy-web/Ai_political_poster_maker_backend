@@ -5,9 +5,12 @@ import { verifyGuestSessionToken } from "../modules/guest/guest.service.js";
 
 export const verifyGuestSession = asyncHandler(
   async (req: Request, _res: Response, next: NextFunction) => {
-    const token = req.cookies?.guest_session_id;
+    const token =
+      req.cookies?.guest_session_id ||
+      (req.headers["x-guest-session-id"] as string) ||
+      (req.headers["x-guest-token"] as string);
 
-    // Cookie-র token যাচাই করে আসল session ID request-এ রাখি।
+    // Cookie বা Header-এর token যাচাই করে আসল session ID request-এ রাখি।
     req.guestSessionId = await verifyGuestSessionToken(token);
 
     next();
@@ -21,8 +24,11 @@ export const requireUserOrGuest = asyncHandler(
       return;
     }
 
-    // User না থাকলে guest cookie যাচাই করে আসল session ID রাখি।
-    const token = req.cookies?.guest_session_id;
+    // User না থাকলে guest cookie বা header যাচাই করে আসল session ID রাখি।
+    const token =
+      req.cookies?.guest_session_id ||
+      (req.headers["x-guest-session-id"] as string) ||
+      (req.headers["x-guest-token"] as string);
     req.guestSessionId = await verifyGuestSessionToken(token);
 
     next();

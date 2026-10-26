@@ -5,20 +5,13 @@ import sendResponse from "../../utils/sendResponse.js";
 import { uploadImageService, validateAssetAccess, deleteAssetService } from "./upload.service.js";
 
 export const uploadController = asyncHandler(async (req: Request, res: Response) => {
-<<<<<<< HEAD
   const ownerUserId = req.user?.id || req.body?.ownerUserId;
+  const guestSessionId = req.guestSessionId || req.body?.guestSessionId;
   const purpose = req.body?.purpose || "USER_UPLOAD";
-  const guestSessionId = req.body?.guestSessionId;
-=======
-  const ownerUserId = req.user?.id;
-  const guestSessionId = req.guestSessionId;
-
-  const purpose = req.body?.purpose || "DEFAULT_PURPOSE";
 
   if (!ownerUserId && !guestSessionId) {
     throw new ApiError(401, "A verified user or guest session is required");
   }
->>>>>>> d329304 (feat: secure auth and guest ownership flows)
 
   const asset = await uploadImageService(req.file, {
     purpose,
@@ -41,7 +34,7 @@ export const verifyAssetOwner = asyncHandler(async (req: Request, _res: Response
   const rawUserId = req.user?.id || req.body?.ownerUserId || req.query?.ownerUserId;
   const userId = typeof rawUserId === "string" ? rawUserId : Array.isArray(rawUserId) ? rawUserId[0] : undefined;
 
-  const rawGuestSessionId = req.body?.guestSessionId || req.query?.guestSessionId;
+  const rawGuestSessionId = req.guestSessionId || req.body?.guestSessionId || req.query?.guestSessionId;
   const guestSessionId = typeof rawGuestSessionId === "string" ? rawGuestSessionId : Array.isArray(rawGuestSessionId) ? rawGuestSessionId[0] : undefined;
 
   await validateAssetAccess(assetId, userId, guestSessionId);
@@ -55,7 +48,7 @@ export const deleteAssetController = asyncHandler(async (req: Request, res: Resp
   const rawUserId = req.user?.id || req.body?.ownerUserId;
   const userId = typeof rawUserId === "string" ? rawUserId : Array.isArray(rawUserId) ? rawUserId[0] : undefined;
 
-  const rawGuestSessionId = req.body?.guestSessionId;
+  const rawGuestSessionId = req.guestSessionId || req.body?.guestSessionId;
   const guestSessionId = typeof rawGuestSessionId === "string" ? rawGuestSessionId : Array.isArray(rawGuestSessionId) ? rawGuestSessionId[0] : undefined;
 
   const deletedAsset = await deleteAssetService(assetId, userId, guestSessionId);

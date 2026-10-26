@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { prisma } from "../../lib/prisma.js";
 import { ApiError } from "../../utils/ApiError.js";
+import { storageService } from "../../services/storage/storage.service.js";
+import { dispatchPosterRenderJob } from "../../workers/poster.worker.js";
 import type { Prisma } from "@prisma/client";
 import type {
   IPosterOwnerContext,
@@ -196,8 +198,24 @@ class PosterService {
       prisma.poster.count({ where }),
     ]);
 
+    const mappedItems = items.map((item) => ({
+      ...item,
+      output: item.output
+        ? {
+            ...item.output,
+            url: storageService.getSecureUrl(item.output.storageKey),
+          }
+        : null,
+      preview: item.preview
+        ? {
+            ...item.preview,
+            url: storageService.getSecureUrl(item.preview.storageKey),
+          }
+        : null,
+    }));
+
     return {
-      items,
+      items: mappedItems,
       meta: {
         page: query.page,
         limit: query.limit,
@@ -234,7 +252,21 @@ class PosterService {
       throw new ApiError(404, "Poster not found");
     }
 
-    return poster;
+    return {
+      ...poster,
+      output: poster.output
+        ? {
+            ...poster.output,
+            url: storageService.getSecureUrl(poster.output.storageKey),
+          }
+        : null,
+      preview: poster.preview
+        ? {
+            ...poster.preview,
+            url: storageService.getSecureUrl(poster.preview.storageKey),
+          }
+        : null,
+    };
   }
 
   /**
@@ -351,7 +383,7 @@ class PosterService {
   }
 
   /**
-   * 7. Trigger poster render job
+   * 7. Trigger poster render job with Idempotency, Billing Reservation, and Worker Dispatch
    */
   public async triggerRender(
     owner: IPosterOwnerContext,
@@ -359,8 +391,19 @@ class PosterService {
     input: IRenderPosterInput = {}
   ) {
     const poster = await this.getPosterById(owner, id);
+    const renderIdempotencyKey = input.idempotencyKey || `render_${id}_${Date.now()}`;
 
+    // Idempotency: If poster is already completed and triggered with the same idempotency key
+    if (poster.status === "COMPLETED") {
+      return poster;
+    }
+
+    // Idempotency: If already processing
     if (poster.status === "PROCESSING") {
+      // If client retries with same idempotencyKey, return the processing poster safely
+      if (input.idempotencyKey && poster.idempotencyKey === input.idempotencyKey) {
+        return poster;
+      }
       throw new ApiError(409, "Poster is already processing a render job");
     }
 
@@ -370,8 +413,58 @@ class PosterService {
 
     await validateTemplate(poster.templateId);
 
-    // Transition status to PROCESSING
-    return prisma.poster.update({
+    // 1. Billing Reservation
+    if (owner.userId) {
+      // Authenticated User: Verify and reserve credit (or grant starter credit)
+      const wallet = await prisma.creditWallet.findUnique({
+        where: { userId: owner.userId },
+      });
+
+      const currentBalance = wallet ? wallet.balance : 5; // Default 5 starter credits if uninitialized
+
+      if (currentBalance < 1) {
+        throw new ApiError(402, "Insufficient poster credits. Please recharge your credit wallet.");
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const updatedWallet = await tx.creditWallet.upsert({
+          where: { userId: owner.userId! },
+          create: {
+            userId: owner.userId!,
+            balance: 4,
+          },
+          update: {
+            balance: { decrement: 1 },
+          },
+        });
+
+        await tx.creditLedgerEntry.create({
+          data: {
+            userId: owner.userId!,
+            type: "POSTER_DEBIT",
+            amount: -1,
+            balanceAfter: updatedWallet.balance,
+            idempotencyKey: `reserve_${renderIdempotencyKey}`,
+          },
+        });
+      });
+    } else if (owner.guestSessionId) {
+      // Guest User: Check free quota (max 3 successful posters)
+      const guestSession = await prisma.guestSession.findUnique({
+        where: { id: owner.guestSessionId },
+        select: { successfulPosters: true },
+      });
+
+      if (guestSession && guestSession.successfulPosters >= 3) {
+        throw new ApiError(
+          403,
+          "Guest free poster limit reached (maximum 3 posters). Please register an account to continue."
+        );
+      }
+    }
+
+    // 2. Transition status to PROCESSING atomically
+    const updatedPoster = await prisma.poster.update({
       where: { id },
       data: {
         status: "PROCESSING",
@@ -387,10 +480,27 @@ class PosterService {
         },
       },
     });
+
+    // 3. Dispatch render job to background worker queue
+    dispatchPosterRenderJob({
+      posterId: poster.id,
+      userId: owner.userId,
+      guestSessionId: owner.guestSessionId,
+      templateId: poster.templateId,
+      inputData: (poster.inputData as Record<string, unknown>) || {},
+      sourceAssets: poster.sourceAssets.map((sa) => ({
+        assetId: sa.assetId,
+        position: sa.position,
+      })),
+      rendererVersion: input.rendererVersion || "1.0.0",
+      idempotencyKey: renderIdempotencyKey,
+    });
+
+    return updatedPoster;
   }
 
   /**
-   * 8. Polling endpoint for frontend to check render progress
+   * 8. Polling endpoint for frontend to check render progress with secure public URLs
    */
   public async getPosterStatus(
     owner: IPosterOwnerContext,
@@ -401,8 +511,8 @@ class PosterService {
     return {
       id: poster.id,
       status: poster.status,
-      outputUrl: poster.output?.storageKey || null,
-      previewUrl: poster.preview?.storageKey || null,
+      outputUrl: storageService.getSecureUrl(poster.output?.storageKey),
+      previewUrl: storageService.getSecureUrl(poster.preview?.storageKey),
       errorCode: poster.errorCode,
       errorMessage: poster.errorMessage,
       completedAt: poster.completedAt,
