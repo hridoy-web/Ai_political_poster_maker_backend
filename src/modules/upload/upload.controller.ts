@@ -1,32 +1,25 @@
-import { Request, Response, NextFunction } from "express";
+import type { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/ApiError.js";
 import sendResponse from "../../utils/sendResponse.js";
-import { uploadImageService, validateAssetAccess, deleteAssetService } from "./upload.service.js";
+import { uploadImageService, deleteAssetService } from "./upload.service.js";
 
 export const uploadController = asyncHandler(async (req: Request, res: Response) => {
-<<<<<<< HEAD
-  const ownerUserId = req.user?.id || req.body?.ownerUserId;
-  const purpose = req.body?.purpose || "USER_UPLOAD";
-  const guestSessionId = req.body?.guestSessionId;
-=======
+  // Owner ID কেবল verified middleware থেকে নেওয়া হয়; request body বিশ্বাস করি না।
   const ownerUserId = req.user?.id;
   const guestSessionId = req.guestSessionId;
-
-  const purpose = req.body?.purpose || "DEFAULT_PURPOSE";
 
   if (!ownerUserId && !guestSessionId) {
     throw new ApiError(401, "A verified user or guest session is required");
   }
->>>>>>> d329304 (feat: secure auth and guest ownership flows)
 
   const asset = await uploadImageService(req.file, {
-    purpose,
+    purpose: req.body?.purpose || "USER_UPLOAD",
     ownerUserId,
     guestSessionId,
   });
 
-  sendResponse(res, {
+  return sendResponse(res, {
     statusCode: 201,
     success: true,
     message: "Image processed, uploaded, and asset recorded successfully.",
@@ -34,36 +27,27 @@ export const uploadController = asyncHandler(async (req: Request, res: Response)
   });
 });
 
-export const verifyAssetOwner = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
-  const rawAssetId = req.params.id;
-  const assetId = typeof rawAssetId === "string" ? rawAssetId : Array.isArray(rawAssetId) ? rawAssetId[0] : "";
+export const deleteAssetController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const rawAssetId = req.params.id;
+    const assetId = Array.isArray(rawAssetId) ? rawAssetId[0] : rawAssetId;
 
-  const rawUserId = req.user?.id || req.body?.ownerUserId || req.query?.ownerUserId;
-  const userId = typeof rawUserId === "string" ? rawUserId : Array.isArray(rawUserId) ? rawUserId[0] : undefined;
+    if (!assetId) {
+      throw new ApiError(400, "Asset ID is required");
+    }
 
-  const rawGuestSessionId = req.body?.guestSessionId || req.query?.guestSessionId;
-  const guestSessionId = typeof rawGuestSessionId === "string" ? rawGuestSessionId : Array.isArray(rawGuestSessionId) ? rawGuestSessionId[0] : undefined;
+    // Delete service যাচাই করা request identity দিয়ে ownership মিলিয়ে দেখে।
+    const deletedAsset = await deleteAssetService(
+      assetId,
+      req.user?.id,
+      req.guestSessionId,
+    );
 
-  await validateAssetAccess(assetId, userId, guestSessionId);
-  next();
-});
-
-export const deleteAssetController = asyncHandler(async (req: Request, res: Response) => {
-  const rawAssetId = req.params.id;
-  const assetId = typeof rawAssetId === "string" ? rawAssetId : Array.isArray(rawAssetId) ? rawAssetId[0] : "";
-
-  const rawUserId = req.user?.id || req.body?.ownerUserId;
-  const userId = typeof rawUserId === "string" ? rawUserId : Array.isArray(rawUserId) ? rawUserId[0] : undefined;
-
-  const rawGuestSessionId = req.body?.guestSessionId;
-  const guestSessionId = typeof rawGuestSessionId === "string" ? rawGuestSessionId : Array.isArray(rawGuestSessionId) ? rawGuestSessionId[0] : undefined;
-
-  const deletedAsset = await deleteAssetService(assetId, userId, guestSessionId);
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Asset deleted successfully.",
-    data: deletedAsset,
-  });
-});
+    return sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Asset deleted successfully.",
+      data: deletedAsset,
+    });
+  },
+);

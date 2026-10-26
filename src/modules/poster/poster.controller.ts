@@ -28,15 +28,12 @@ function validate<T>(schema: z.ZodType<T>, data: unknown): T {
   return result.data;
 }
 
-/**
- * Extracts authenticated user or guest session from request headers/cookies.
- */
+// Owner identity shared middleware-এ verify হয়ে request-এ রাখা হয়।
 function getOwnerContext(req: Request): IPosterOwnerContext {
-  const userId = req.user?.id;
-  const guestSessionId =
-    (req.headers["x-guest-session-id"] as string) || req.cookies?.guest_session_id;
-
-  return { userId, guestSessionId };
+  return {
+    userId: req.user?.id,
+    guestSessionId: req.guestSessionId,
+  };
 }
 
 // 1. POST /api/v1/posters - Create new poster draft

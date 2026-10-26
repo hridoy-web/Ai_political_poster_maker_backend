@@ -71,11 +71,13 @@ export const validateAssetAccess = async (
     if (!asset) throw new ApiError(404, "Asset not found");
     if (asset.deletedAt) throw new ApiError(400, "Asset has been deleted");
 
-    if (asset.ownerUserId && userId && asset.ownerUserId !== userId) {
-        throw new ApiError(403, "Forbidden: You do not own this private asset");
-    }
-    if (asset.guestSessionId && guestSessionId && asset.guestSessionId !== guestSessionId) {
-        throw new ApiError(403, "Forbidden: You do not own this guest asset");
+    // পরিচয় না থাকলে বা asset-এর মালিকের সঙ্গে না মিললে access বন্ধ করি।
+    const isUserOwner = Boolean(asset.ownerUserId && asset.ownerUserId === userId);
+    const isGuestOwner = Boolean(
+        asset.guestSessionId && asset.guestSessionId === guestSessionId
+    );
+    if (!isUserOwner && !isGuestOwner) {
+        throw new ApiError(403, "Forbidden: You do not own this asset");
     }
     return asset;
 };

@@ -35,6 +35,8 @@ class AiService {
     });
 
     if (existingTask) {
+      this.assertTaskOwner(existingTask, authContext);
+
       if (existingTask.status === AiTaskStatus.SUCCEEDED) {
         const resultJson = existingTask.result as { slogans?: ISloganItem[] } | null;
         return {
@@ -157,6 +159,8 @@ class AiService {
     });
 
     if (existing) {
+      this.assertTaskOwner(existing, authContext);
+
       return {
         taskId: existing.id,
         status: existing.status,
@@ -232,23 +236,31 @@ class AiService {
       throw new ApiError(404, "AI task not found");
     }
 
-    // Enforce creator ownership
-    const isUserOwner = Boolean(task.userId && authContext.userId && task.userId === authContext.userId);
-    const isGuestOwner = Boolean(
-      task.guestSessionId &&
-      authContext.guestSessionId &&
-      task.guestSessionId === authContext.guestSessionId
-    );
-    const isAdmin = authContext.role === "ADMIN";
-
-    // UPDATED: আগের condition-এ userId ও guestSessionId দুটোই null হলে ownership check বাদ পড়ত।
-    // এখন task-এর owner বা admin না হলে access বন্ধ থাকবে।
-    if (!isUserOwner && !isGuestOwner && !isAdmin) {
-      throw new ApiError(403, "Forbidden: You do not have permission to view this task result");
-    }
+    this.assertTaskOwner(task, authContext);
 
     const { userId, guestSessionId, ...safeTask } = task;
     return safeTask;
+  }
+
+  // AI task ID বা idempotency key দিয়ে result/status অন্য owner-কে দেওয়া হয় না।
+  private assertTaskOwner(
+    task: { userId: string | null; guestSessionId: string | null },
+    authContext: IAuthContext,
+  ): void {
+    const isUserOwner = Boolean(
+      task.userId && task.userId === authContext.userId,
+    );
+    const isGuestOwner = Boolean(
+      task.guestSessionId &&
+        task.guestSessionId === authContext.guestSessionId,
+    );
+
+    if (!isUserOwner && !isGuestOwner && authContext.role !== "ADMIN") {
+      throw new ApiError(
+        403,
+        "Forbidden: You do not have permission to access this task",
+      );
+    }
   }
 
   /**

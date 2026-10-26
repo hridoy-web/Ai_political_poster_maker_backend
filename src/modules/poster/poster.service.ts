@@ -25,32 +25,6 @@ const buildOwnerWhere = (owner: IPosterOwnerContext) => {
   throw new ApiError(401, "Authentication required: user or guest session missing");
 };
 
-/**
- * Ensures guest session exists in DB so foreign key constraints are always satisfied.
- */
-const ensureGuestSession = async (guestSessionId: string) => {
-  const existing = await prisma.guestSession.findUnique({
-    where: { id: guestSessionId },
-    select: { id: true },
-  });
-
-  if (!existing) {
-    const tokenHash = crypto
-      .createHash("sha256")
-      .update(guestSessionId)
-      .digest("hex");
-
-    await prisma.guestSession.upsert({
-      where: { id: guestSessionId },
-      update: {},
-      create: {
-        id: guestSessionId,
-        tokenHash,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-    });
-  }
-};
 
 /**
  * Validates that template exists and is PUBLISHED.
@@ -111,7 +85,10 @@ class PosterService {
   public async createPoster(owner: IPosterOwnerContext, data: ICreatePosterInput) {
     const idempotencyKey = data.idempotencyKey || `poster_${crypto.randomUUID()}`;
 
-    // Return existing poster on idempotent re-submission
+    // আগে verified owner আবশ্যক; idempotency key দিয়ে অন্যের poster ফেরত দিই না।
+    buildOwnerWhere(owner);
+
+    // একই owner-এর পুনরায় request হলে আগের poster খুঁজি।
     const existingPoster = await prisma.poster.findUnique({
       where: { idempotencyKey },
       include: {
@@ -121,6 +98,18 @@ class PosterService {
     });
 
     if (existingPoster) {
+      const isUserOwner = Boolean(
+        owner.userId && existingPoster.userId === owner.userId
+      );
+      const isGuestOwner = Boolean(
+        owner.guestSessionId &&
+          existingPoster.guestSessionId === owner.guestSessionId
+      );
+
+      if (!isUserOwner && !isGuestOwner) {
+        throw new ApiError(409, "Idempotency key is already in use");
+      }
+
       return existingPoster;
     }
 
@@ -130,9 +119,6 @@ class PosterService {
       await validateSourceAssetsOwnership(owner, data.sourceAssets);
     }
 
-    if (owner.guestSessionId) {
-      await ensureGuestSession(owner.guestSessionId);
-    }
 
     // Atomically create poster and source asset relations
     return prisma.$transaction(async (tx) => {
@@ -319,9 +305,6 @@ class PosterService {
     const original = await this.getPosterById(owner, id);
     const idempotencyKey = `poster_${crypto.randomUUID()}`;
 
-    if (owner.guestSessionId) {
-      await ensureGuestSession(owner.guestSessionId);
-    }
 
     return prisma.$transaction(async (tx) => {
       return tx.poster.create({
