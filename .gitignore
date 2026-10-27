@@ -50,6 +50,7 @@ Thumbs.db
 # Testing & Coverage
 coverage/
 .nyc_output/
+.antigravityignore
 
 # Environment variables & secrets (added by GitHub Guardian)
 *.env

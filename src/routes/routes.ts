@@ -13,6 +13,8 @@ import { paymentRoutes } from "../modules/payment/payment.routes.js";
 import { walletRoutes } from "../modules/wallet/wallet.routes.js";
 import { transactionRoutes } from "../modules/transaction/transaction.routes.js";
 import { subscriptionRoutes } from "../modules/subscription/subscription.routes.js";
+import adminRouter from "../modules/admin/route.js";
+import rbacRouter from "../modules/rbac/route.js";
 
 const router = Router();
 
@@ -25,6 +27,10 @@ router.use("/bookmarks", bookmarkRouter);
 router.use("/ai", aiRouter);
 router.use("/posters", posterRoutes);
 router.use("/guest", guestRouter);
+
+// Dev 2: Admin & RBAC Routes
+router.use("/admin", adminRouter);
+router.use("/rbac", rbacRouter);
 
 // Dev 7: Billing, Packages, Payments, Wallets, Transactions, and Subscriptions
 router.use("/package", packageRoutes);
