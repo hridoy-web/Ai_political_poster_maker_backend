@@ -7,6 +7,7 @@ const userRoutes = Router();
 
 userRoutes.get("/me", verifyToken, getCurrentUser);
 userRoutes.delete("/me", verifyToken, deleteCurrentUser);
-userRoutes.post("/update-profile", verifyToken,upload.single("image"), updateProfile);
+userRoutes.post("/update-profile", verifyToken, upload.single("image"), updateProfile);
+userRoutes.patch("/profile", verifyToken, upload.single("image"), updateProfile);
 
 export default userRoutes;

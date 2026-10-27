@@ -1,5 +1,5 @@
 import app from "./app.js";
-import connectDB from "./config/db.js";
+import prisma from "./lib/prisma.js";
 import { startPosterWorkerQueue } from "./workers/poster.worker.js";
 import { startAiTaskWorkerQueue } from "./workers/aiTask.worker.js";
 import { startCleanupCronJob } from "./cronJob/cleanupExpiredSessions.job.js";
@@ -8,7 +8,8 @@ const port = Number(process.env.PORT ?? 5000);
 
 async function startServer(): Promise<void> {
   try {
-    await connectDB();
+    await prisma.$connect();
+    console.log("PostgreSQL connected successfully.");
 
     // Start background asynchronous workers and maintenance cron jobs
     const aiWorkerTimer = startAiTaskWorkerQueue(5000);
