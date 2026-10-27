@@ -119,6 +119,21 @@ export const registerUser = async (
           },
         });
 
+        const defaultRole = await tx.role.findUnique({
+          where: { name: "USER" },
+          select: { id: true },
+        });
+
+        if (!defaultRole) {
+          throw new Error("USER role is not seeded");
+        }
+
+        await tx.userRole.create({
+          data: {
+            userId: user.id,
+            roleId: defaultRole.id,
+          },
+        });
         if (avatar) {
           const asset = await tx.asset.create({
             data: {
