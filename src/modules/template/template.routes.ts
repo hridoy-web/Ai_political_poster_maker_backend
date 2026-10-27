@@ -1,44 +1,48 @@
 import { Router } from "express";
-import { optionalAuth, verifyToken } from "../../middlewares/auth.middleware.js";
-import { requirePermission } from "../../middlewares/permission.middleware.js";
 import { templateController } from "./template.controller.js";
+import { verifyToken, optionalAuth } from "../../middlewares/auth.middleware.js";
+import { requirePermission } from "../../middlewares/permission.middleware.js";
 
 const router = Router();
 
-// Management routes: protected by verifyToken + requirePermission
+// Public routes
+router.get("/", templateController.listTemplates);
+router.get("/:id", optionalAuth, templateController.getTemplate);
+
+// Protected Management routes
 router.post(
   "/",
   verifyToken,
-  requirePermission("template:create"),
+  requirePermission("MANAGE_TEMPLATES"),
   templateController.createTemplate
 );
+
 router.patch(
   "/:id",
   verifyToken,
-  requirePermission("template:update"),
+  requirePermission("MANAGE_TEMPLATES"),
   templateController.updateTemplate
 );
+
 router.post(
   "/:id/publish",
   verifyToken,
-  requirePermission("template:publish"),
+  requirePermission("MANAGE_TEMPLATES"),
   templateController.publishTemplate
 );
+
 router.post(
   "/:id/archive",
   verifyToken,
-  requirePermission("template:archive"),
+  requirePermission("MANAGE_TEMPLATES"),
   templateController.archiveTemplate
 );
+
 router.post(
   "/:id/unarchive",
   verifyToken,
-  requirePermission("template:unarchive"),
+  requirePermission("MANAGE_TEMPLATES"),
   templateController.unarchiveTemplate
 );
-
-// Public catalog routes: open without requiring permission checks
-router.get("/", templateController.listTemplates);
-router.get("/:id", optionalAuth, templateController.getTemplate);
 
 export const TemplateRoutes = router;

@@ -184,13 +184,18 @@ class PosterService {
       prisma.poster.count({ where }),
     ]);
 
+    const canAccessOutput = Boolean(owner.userId);
+
     const mappedItems = items.map((item) => ({
       ...item,
-      output: item.output
+      output: canAccessOutput && item.output
         ? {
             ...item.output,
             url: storageService.getSecureUrl(item.output.storageKey),
           }
+        : null,
+      outputUrl: canAccessOutput && item.output
+        ? storageService.getSecureUrl(item.output.storageKey)
         : null,
       preview: item.preview
         ? {
@@ -238,13 +243,18 @@ class PosterService {
       throw new ApiError(404, "Poster not found");
     }
 
+    const canAccessOutput = Boolean(owner.userId);
+
     return {
       ...poster,
-      output: poster.output
+      output: canAccessOutput && poster.output
         ? {
             ...poster.output,
             url: storageService.getSecureUrl(poster.output.storageKey),
           }
+        : null,
+      outputUrl: canAccessOutput && poster.output
+        ? storageService.getSecureUrl(poster.output.storageKey)
         : null,
       preview: poster.preview
         ? {
@@ -494,7 +504,7 @@ class PosterService {
     return {
       id: poster.id,
       status: poster.status,
-      outputUrl: storageService.getSecureUrl(poster.output?.storageKey),
+      outputUrl: owner.userId ? poster.outputUrl : null,
       previewUrl: storageService.getSecureUrl(poster.preview?.storageKey),
       errorCode: poster.errorCode,
       errorMessage: poster.errorMessage,

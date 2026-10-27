@@ -2,6 +2,7 @@ import { prisma } from "../../lib/prisma.js";
 import { ApiError } from "../../utils/ApiError.js";
 import { cleanTemplateHtml, cleanTemplateCss } from "../../lib/sanitizeHtml.js";
 import { configSchema } from "./template.validation.js";
+import { BillingService } from "../payment/billing.service.js";
 import type {
   ICreateTemplateInput,
   IUpdateTemplateInput,
@@ -23,7 +24,7 @@ const sanitizeConfig = (config: any) => {
   };
 };
 
-// Dev 8: Asset Ownership & Visibility Check
+// Dev 8: Asset Ownership, Guest & Visibility Check
 const validatePreviewAsset = async (assetId: string, userId?: string) => {
   const asset = await prisma.asset.findUnique({
     where: { id: assetId },
@@ -35,8 +36,20 @@ const validatePreviewAsset = async (assetId: string, userId?: string) => {
   if (asset.deletedAt) {
     throw new ApiError(400, "Preview asset is deleted");
   }
-  if (asset.ownerUserId && userId && asset.ownerUserId !== userId) {
-    throw new ApiError(403, "Cannot use another user's private asset as preview");
+
+ 
+  if (asset.guestSessionId) {
+    throw new ApiError(403, "Guest assets cannot be used as template preview");
+  }
+
+
+  if (asset.ownerUserId) {
+    if (!userId) {
+      throw new ApiError(401, "Authentication required to use private asset");
+    }
+    if (asset.ownerUserId !== userId) {
+      throw new ApiError(403, "Cannot use another user's private asset as preview");
+    }
   }
 };
 
@@ -56,9 +69,13 @@ const createTemplate = async (data: ICreateTemplateInput, userId?: string) => {
   });
 };
 
+// Public Catalog Isolation
 const listTemplates = async (query: IListTemplateQuery) => {
   const where = {
     status: "PUBLISHED" as const,
+    category: {
+      isActive: true,
+    },
     ...(query.categoryId && { categoryId: query.categoryId }),
     ...(query.accessLevel && { accessLevel: query.accessLevel }),
   };
@@ -69,6 +86,16 @@ const listTemplates = async (query: IListTemplateQuery) => {
       orderBy: { createdAt: "desc" },
       skip: (query.page - 1) * query.limit,
       take: query.limit,
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            isActive: true,
+          },
+        },
+      },
     }),
     prisma.template.count({ where }),
   ]);
@@ -84,10 +111,10 @@ const listTemplates = async (query: IListTemplateQuery) => {
   };
 };
 
-// Dev 7: Entitlement check integration & Dev 4: Catalog Isolation
+//BillingService.getEntitlements 
 const getTemplateById = async (
   id: string,
-  user?: { id: string; role?: string; isPremium?: boolean }
+  user?: { id: string; role?: string }
 ) => {
   const template = await prisma.template.findUnique({
     where: { id },
@@ -105,15 +132,20 @@ const getTemplateById = async (
 
   if (!template) throw new ApiError(404, "Template not found");
 
-  // Regular users cannot view draft or archived templates unless they are admins.
-  if (user?.role !== "ADMIN" && template.status !== "PUBLISHED") {
+  const isCategoryActive = template.category?.isActive ?? true;
+  if (user?.role !== "SUPER_ADMIN" && (template.status !== "PUBLISHED" || !isCategoryActive)) {
     throw new ApiError(404, "Template not found or not published");
   }
 
-  // Premium template check 
+  // Premium Access Check via Hridoy's BillingService
   if (template.accessLevel === "PREMIUM") {
-    if (user?.role !== "ADMIN") {
-      if (!user || !user.isPremium) {
+    if (user?.role !== "SUPER_ADMIN") {
+      if (!user?.id) {
+        throw new ApiError(401, "Authentication required to access premium template");
+      }
+
+      const entitlements = await BillingService.getEntitlements(user.id);
+      if (!entitlements.features.premiumAccess) {
         throw new ApiError(403, "This is a premium template. Premium entitlement required.");
       }
     }

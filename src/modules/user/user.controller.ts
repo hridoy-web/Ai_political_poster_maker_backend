@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import sharp from "sharp";
 import { ApiError } from "../../utils/ApiError.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import sendResponse from "../../utils/sendResponse.js";
@@ -102,8 +103,13 @@ export const updateProfile = asyncHandler(
 
       // Upload new profile image if provided
       if (req.file) {
+        const optimizedBuffer = await sharp(req.file.buffer)
+          .resize(512, 512, { fit: "cover", position: "centre" })
+          .webp({ quality: 85 })
+          .toBuffer();
+
         const uploaded = await uploadOnCloudinary(
-          req.file.buffer,
+          optimizedBuffer,
           "political_posters/user_profiles",
         );
 
@@ -126,8 +132,8 @@ export const updateProfile = asyncHandler(
               ownerUserId: existingUser.id,
               purpose: "USER_UPLOAD",
               storageKey: uploaded.public_id,
-              mimeType: req.file!.mimetype,
-              sizeBytes: req.file!.size,
+              mimeType: "image/webp",
+              sizeBytes: optimizedBuffer.length,
             },
             select: { id: true },
           });
