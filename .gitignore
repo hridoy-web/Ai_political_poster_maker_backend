@@ -51,3 +51,10 @@ Thumbs.db
 coverage/
 .nyc_output/
 .antigravityignore
+
+# Environment variables & secrets (added by GitHub Guardian)
+*.env
+!.env.sample
+.envrc
+.venv/
+venv/

@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
-import { AiTaskStatus, CreditEntryType } from "@prisma/client";
+import { AiTaskStatus } from "@prisma/client";
+import { BillingService } from "../modules/payment/billing.service.js";
 
 /**
  * Summary metrics of maintenance cleanup execution.
@@ -17,35 +18,20 @@ export interface ICleanupMaintenanceResult {
 
 /**
  * Helper to refund credits for billable AI tasks that definitively timed out or failed.
+ * Integrates directly with Hridoy's BillingService to guarantee immutable ledger consistency.
  */
 async function refundTaskCredits(task: { id: string; userId: string | null; unitsCharged: number }, reason: string): Promise<void> {
   if (!task.userId || task.unitsCharged <= 0) return;
 
   try {
-    await prisma.$transaction(async (tx) => {
-      const wallet = await tx.creditWallet.findUnique({
-        where: { userId: task.userId! },
-      });
-      if (wallet) {
-        const newBalance = wallet.balance + task.unitsCharged;
-        await tx.creditWallet.update({
-          where: { userId: task.userId! },
-          data: { balance: newBalance },
-        });
-        await tx.creditLedgerEntry.create({
-          data: {
-            userId: task.userId!,
-            type: CreditEntryType.REFUND,
-            amount: task.unitsCharged,
-            balanceAfter: newBalance,
-            idempotencyKey: `ai-cron-${reason}-${task.id}`,
-          },
-        });
-        console.log(`[Maintenance CronJob] Refunded ${task.unitsCharged} credits to user ${task.userId} (${reason})`);
-      }
-    });
+    await BillingService.refundCredits(
+      task.userId,
+      task.unitsCharged,
+      `ai-cron-${reason}-${task.id}`
+    );
+    console.log(`[Maintenance CronJob] Refunded ${task.unitsCharged} credit(s) via BillingService to user ${task.userId} (${reason})`);
   } catch (err) {
-    console.error(`[Maintenance CronJob] Failed refund for task ${task.id}:`, err);
+    console.error(`[Maintenance CronJob] BillingService.refundCredits failed for task ${task.id}:`, err);
   }
 }
 
