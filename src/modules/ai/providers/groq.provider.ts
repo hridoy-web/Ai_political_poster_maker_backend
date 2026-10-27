@@ -29,38 +29,50 @@ export class GroqProvider implements IAiTextProvider {
     const count = input.count ?? 4;
     const prompt = buildSloganPrompt(input);
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Groq request timed out after 8s")), 8000)
-    );
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+    }, 8000);
 
-    const completionPromise = this.client.chat.completions.create({
-      model: this.defaultModel,
-      messages: [
+    try {
+      const response = await this.client.chat.completions.create(
         {
-          role: "system",
-          content:
-            "You are an expert political branding strategist in Bangladesh. Return ONLY valid JSON with a 'slogans' array containing headline, subText, category, tone in Bengali.",
+          model: this.defaultModel,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an expert political branding strategist in Bangladesh. Return ONLY valid JSON with a 'slogans' array containing headline, subText, category, tone in Bengali.",
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.7,
         },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-    });
+        { signal: abortController.signal }
+      );
+      clearTimeout(timeoutId);
 
-    const response = await Promise.race([completionPromise, timeoutPromise]);
-    const content = response.choices[0]?.message?.content?.trim() ?? "{}";
-    const slogans = parseSlogansJson(content);
+      const content = response.choices[0]?.message?.content?.trim() ?? "{}";
+      const slogans = parseSlogansJson(content);
 
-    if (slogans.length === 0) {
-      throw new Error("Groq returned empty or unparseable slogans JSON");
+      if (slogans.length === 0) {
+        throw new Error("Groq returned empty or unparseable slogans JSON");
+      }
+
+      return {
+        slogans: slogans.slice(0, count),
+        model: this.defaultModel,
+      };
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (abortController.signal.aborted) {
+        throw new Error("Groq request timed out after 8s (aborted)");
+      }
+      throw err;
     }
-
-    return {
-      slogans: slogans.slice(0, count),
-      model: this.defaultModel,
-    };
   }
 }

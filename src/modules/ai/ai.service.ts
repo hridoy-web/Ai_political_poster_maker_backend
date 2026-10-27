@@ -35,6 +35,8 @@ class AiService {
     });
 
     if (existingTask) {
+      this.assertTaskOwner(existingTask, authContext);
+
       if (existingTask.status === AiTaskStatus.SUCCEEDED) {
         const resultJson = existingTask.result as { slogans?: ISloganItem[] } | null;
         return {
@@ -143,6 +145,60 @@ class AiService {
   }
 
   /**
+   * Directly executes AI slogan generation for an existing queued AiTask.
+   * Updates the existing task in-place to SUCCEEDED without creating duplicate records.
+   */
+  public async executeTaskSloganGeneration(
+    taskId: string,
+    input: IGenerateSlogansInput
+  ): Promise<ISloganItem[]> {
+    let slogans: ISloganItem[] = [];
+    let providerUsed = "gemini";
+    let modelUsed = "unknown";
+
+    // 1. Primary Provider: Gemini
+    if (this.geminiProvider.isConfigured()) {
+      try {
+        const res = await this.geminiProvider.generateSlogans(input);
+        slogans = res.slogans;
+        providerUsed = "gemini";
+        modelUsed = res.model;
+      } catch (geminiErr: any) {
+        console.warn(
+          `[AiService] Primary provider failed for task ${taskId}: ${geminiErr?.message}. Initiating fallback provider...`
+        );
+      }
+    }
+
+    // 2. Fallback Provider: Groq
+    if (slogans.length === 0) {
+      if (!this.groqProvider.isConfigured()) {
+        throw new ApiError(503, "All AI providers are currently unconfigured or unavailable");
+      }
+
+      const res = await this.groqProvider.generateSlogans(input);
+      slogans = res.slogans;
+      providerUsed = "groq";
+      modelUsed = res.model;
+    }
+
+    // 3. Atomically update existing task to SUCCEEDED
+    await prisma.aiTask.update({
+      where: { id: taskId },
+      data: {
+        status: AiTaskStatus.SUCCEEDED,
+        provider: providerUsed,
+        model: modelUsed,
+        result: { slogans } as any,
+        unitsCharged: 0,
+        completedAt: new Date(),
+      },
+    });
+
+    return slogans;
+  }
+
+  /**
    * Enqueues an asynchronous AI task into the database worker queue.
    */
   public async enqueueTask(
@@ -157,6 +213,8 @@ class AiService {
     });
 
     if (existing) {
+      this.assertTaskOwner(existing, authContext);
+
       return {
         taskId: existing.id,
         status: existing.status,
@@ -232,21 +290,31 @@ class AiService {
       throw new ApiError(404, "AI task not found");
     }
 
-    // Enforce creator ownership
-    const isUserOwner = Boolean(task.userId && authContext.userId && task.userId === authContext.userId);
-    const isGuestOwner = Boolean(
-      task.guestSessionId &&
-      authContext.guestSessionId &&
-      task.guestSessionId === authContext.guestSessionId
-    );
-    const isAdmin = authContext.role === "ADMIN";
-
-    if ((task.userId || task.guestSessionId) && !isUserOwner && !isGuestOwner && !isAdmin) {
-      throw new ApiError(403, "Forbidden: You do not have permission to view this task result");
-    }
+    this.assertTaskOwner(task, authContext);
 
     const { userId, guestSessionId, ...safeTask } = task;
     return safeTask;
+  }
+
+  // AI task ID বা idempotency key দিয়ে result/status অন্য owner-কে দেওয়া হয় না।
+  private assertTaskOwner(
+    task: { userId: string | null; guestSessionId: string | null },
+    authContext: IAuthContext,
+  ): void {
+    const isUserOwner = Boolean(
+      task.userId && task.userId === authContext.userId,
+    );
+    const isGuestOwner = Boolean(
+      task.guestSessionId &&
+        task.guestSessionId === authContext.guestSessionId,
+    );
+
+    if (!isUserOwner && !isGuestOwner && authContext.role !== "ADMIN") {
+      throw new ApiError(
+        403,
+        "Forbidden: You do not have permission to access this task",
+      );
+    }
   }
 
   /**

@@ -4,6 +4,8 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import sendResponse from "../../utils/sendResponse.js";
 import { prisma } from "../../config/db.js";
 import cloudinary, { uploadOnCloudinary } from "../../config/cloudinary.js";
+import { cookieOptions } from "../auth/auth.service.js";
+import { anonymizeUserAccount } from "./user.service.js";
 
 export const getCurrentUser = asyncHandler(
   async (req: Request, res: Response) => {
@@ -41,6 +43,7 @@ export const getCurrentUser = asyncHandler(
 export const updateProfile = asyncHandler(
   async (req: Request, res: Response) => {
     let uploadedPublicId: string | null = null;
+    let profileUpdateCommitted = false;
 
     try {
       if (!req.user) {
@@ -75,7 +78,6 @@ export const updateProfile = asyncHandler(
         throw new ApiError(404, "User not found");
       }
 
-      let avatarAssetId = existingUser.avatarAssetId;
       let oldPublicId: string | null = null;
 
       // Upload new profile image if provided
@@ -86,32 +88,6 @@ export const updateProfile = asyncHandler(
         );
 
         uploadedPublicId = uploaded.public_id;
-
-        // Create new Asset record
-        const asset = await prisma.asset.create({
-          data: {
-            ownerUserId: existingUser.id,
-            purpose: "USER_UPLOAD",
-            storageKey: uploaded.public_id,
-            mimeType: req.file.mimetype,
-            sizeBytes: req.file.size,
-          },
-          select: {
-            id: true,
-          },
-        });
-
-        avatarAssetId = asset.id;
-
-        // Update user profile
-        await prisma.user.update({
-          where: { id: existingUser.id },
-          data: {
-            ...(name !== undefined && { name: name.trim() }),
-            avatarAssetId,
-          },
-        });
-
         // Find previous image public ID
         if (existingUser.avatarAssetId) {
           const oldAsset = await prisma.asset.findUnique({
@@ -122,18 +98,42 @@ export const updateProfile = asyncHandler(
           oldPublicId = oldAsset?.storageKey ?? null;
         }
 
-        // Delete old Asset record after successful profile update
-        if (existingUser.avatarAssetId) {
-          await prisma.asset.delete({
-            where: { id: existingUser.avatarAssetId },
+        // নতুন Asset ও User-এর avatar relation একই transaction-এ save করি।
+        // Database update ব্যর্থ হলে transaction rollback হবে; নতুন Cloudinary file cleanup হবে।
+        await prisma.$transaction(async (tx) => {
+          const asset = await tx.asset.create({
+            data: {
+              ownerUserId: existingUser.id,
+              purpose: "USER_UPLOAD",
+              storageKey: uploaded.public_id,
+              mimeType: req.file!.mimetype,
+              sizeBytes: req.file!.size,
+            },
+            select: { id: true },
           });
-        }
 
-        // Delete old image from Cloudinary
-        if (oldPublicId) {
+          await tx.user.update({
+            where: { id: existingUser.id },
+            data: {
+              ...(name !== undefined && { name: name.trim() }),
+              avatarAssetId: asset.id,
+            },
+          });
+        });
+        profileUpdateCommitted = true;
+
+        // নতুন avatar save হওয়ার পর পুরোনো image cleanup করি।
+        if (existingUser.avatarAssetId) {
           try {
-            await cloudinary.uploader.destroy(oldPublicId);
+            await prisma.asset.delete({
+              where: { id: existingUser.avatarAssetId },
+            });
+
+            if (oldPublicId) {
+              await cloudinary.uploader.destroy(oldPublicId);
+            }
           } catch (error) {
+            // Cleanup ব্যর্থ হলেও নতুন profile image অক্ষত রাখি।
             console.error("Old profile image cleanup error:", error);
           }
         }
@@ -145,6 +145,7 @@ export const updateProfile = asyncHandler(
             name: name.trim(),
           },
         });
+        profileUpdateCommitted = true;
       }
 
       // Fetch updated user
@@ -170,7 +171,7 @@ export const updateProfile = asyncHandler(
       );
     } catch (error) {
       // Clean up newly uploaded image if update fails
-      if (uploadedPublicId) {
+      if (uploadedPublicId && !profileUpdateCommitted) {
         try {
           await cloudinary.uploader.destroy(uploadedPublicId);
         } catch (cleanupError) {
@@ -180,5 +181,28 @@ export const updateProfile = asyncHandler(
 
       throw error;
     }
+  },
+);
+
+export const deleteCurrentUser = asyncHandler(
+  async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new ApiError(401, "Unauthorized");
+    }
+
+    await anonymizeUserAccount(req.user.id);
+
+    // Account anonymize সফল হলে user ও guest—দুই cookie-ই clear করি।
+    res.clearCookie("token", cookieOptions);
+    res.clearCookie("guest_session_id", cookieOptions);
+
+    return sendResponse(
+      res,
+      200,
+      "Account deleted and personal data anonymized",
+      true,
+      null,
+      null,
+    );
   },
 );

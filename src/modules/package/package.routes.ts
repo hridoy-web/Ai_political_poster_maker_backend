@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { createPackage, getPackages } from './package.controller.js';
+import { validateRequest } from '../../middlewares/validateRequest.middleware.js';
+import { createPackageSchema } from './package.validation.js';
 
 const router = Router();
 
@@ -7,6 +9,7 @@ const router = Router();
 router.get('/', getPackages);
 
 // POST /api/v1/packages
-router.post('/', createPackage);
+router.post('/', validateRequest(createPackageSchema), createPackage);
 
 export const packageRoutes = router;
+export default router;
