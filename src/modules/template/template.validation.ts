@@ -7,7 +7,7 @@ const fieldSchema = z.object({
   default: z.string().max(200).optional(),
 });
 
-export const configSchema = z
+export const htmlConfigSchema = z
   .object({
     type: z.literal("html"),
     html: z.string().min(1).max(50_000),
@@ -28,6 +28,53 @@ export const configSchema = z
       }
     }
   });
+
+export const photoSlotSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+  shape: z.enum(["rectangle", "rounded", "circle", "oval"]).default("rounded"),
+  borderRadius: z.number().optional().default(16),
+  borderWidth: z.number().optional().default(0),
+  borderColor: z.string().optional().default("#ffffff"),
+  zIndex: z.number().optional().default(1),
+});
+
+export const textSlotSchema = z.object({
+  id: z.string(),
+  key: z.string(),
+  label: z.string(),
+  defaultText: z.string().optional().default(""),
+  x: z.number(),
+  y: z.number(),
+  maxWidth: z.number().optional(),
+  fontSize: z.number().default(32),
+  fontFamily: z.string().default("Hind Siliguri"),
+  fontWeight: z.string().default("bold"),
+  color: z.string().default("#ffffff"),
+  align: z.enum(["left", "center", "right"]).default("center"),
+  shadow: z.boolean().optional().default(true),
+  shadowColor: z.string().optional().default("rgba(0,0,0,0.8)"),
+  shadowBlur: z.number().optional().default(4),
+  lineHeight: z.number().optional().default(1.2),
+  zIndex: z.number().optional().default(2),
+});
+
+export const canvasConfigSchema = z.object({
+  type: z.literal("canvas"),
+  blankTemplateUrl: z.string().min(1),
+  blankAssetId: z.string().uuid().optional(),
+  previewUrl: z.string().optional(),
+  width: z.number().int().positive().default(1080),
+  height: z.number().int().positive().default(1350),
+  photoSlots: z.array(photoSlotSchema).default([]),
+  textSlots: z.array(textSlotSchema).default([]),
+});
+
+export const configSchema = z.union([htmlConfigSchema, canvasConfigSchema]);
 
 export const createTemplateSchema = z.object({
   categoryId: z.string().uuid("categoryId must be a valid id"),

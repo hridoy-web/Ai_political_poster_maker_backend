@@ -8,7 +8,7 @@ import {
 } from './payment.service.js';
 import sendResponse from '../../utils/sendResponse.js';
 
-const getFrontendUrl = () => process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000';
+const getFrontendUrl = () => (process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
 export const initiatePayment = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;

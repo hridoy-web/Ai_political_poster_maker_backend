@@ -8,11 +8,20 @@ import type {
   IListTemplateQuery,
 } from "./template.interface.js";
 
-const sanitizeConfig = (config: any) => ({
-  ...config,
-  html: cleanTemplateHtml(config.html),
-  css: cleanTemplateCss(config.css ?? ""),
-});
+const sanitizeConfig = (config: any) => {
+  if (config?.type === "canvas") {
+    return {
+      ...config,
+      blankTemplateUrl: typeof config.blankTemplateUrl === "string" ? config.blankTemplateUrl.trim() : "",
+      previewUrl: typeof config.previewUrl === "string" ? config.previewUrl.trim() : undefined,
+    };
+  }
+  return {
+    ...config,
+    html: cleanTemplateHtml(config?.html ?? ""),
+    css: cleanTemplateCss(config?.css ?? ""),
+  };
+};
 
 // Dev 8: Asset Ownership & Visibility Check
 const validatePreviewAsset = async (assetId: string, userId?: string) => {
