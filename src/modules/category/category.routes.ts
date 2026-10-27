@@ -1,37 +1,40 @@
 import { Router } from "express";
+import { categoryController } from "./category.controller.js";
 import { verifyToken } from "../../middlewares/auth.middleware.js";
 import { requirePermission } from "../../middlewares/permission.middleware.js";
-import { categoryController } from "./category.controller.js";
 
 const router = Router();
 
-// Management routes: protected by verifyToken + requirePermission
+// Public route
+router.get("/", categoryController.listCategories);
+
+// Protected routes
 router.post(
   "/",
   verifyToken,
-  requirePermission("category:create"),
+  requirePermission("MANAGE_CATEGORIES"),
   categoryController.createCategory
 );
+
 router.get(
   "/admin/all",
   verifyToken,
-  requirePermission("category:read:all"),
+  requirePermission("MANAGE_CATEGORIES"),
   categoryController.listAllCategories
 );
+
 router.patch(
   "/:id",
   verifyToken,
-  requirePermission("category:update"),
+  requirePermission("MANAGE_CATEGORIES"),
   categoryController.updateCategory
 );
+
 router.patch(
   "/:id/status",
   verifyToken,
-  requirePermission("category:status:update"),
+  requirePermission("MANAGE_CATEGORIES"),
   categoryController.setCategoryStatus
 );
-
-// Public catalog: active categories only
-router.get("/", categoryController.listCategories);
 
 export const CategoryRoutes = router;
