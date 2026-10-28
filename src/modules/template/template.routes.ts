@@ -13,36 +13,43 @@ router.get("/:id", optionalAuth, templateController.getTemplate);
 router.post(
   "/",
   verifyToken,
-  requirePermission("MANAGE_TEMPLATES"),
+  requirePermission(["template:create", "MANAGE_TEMPLATES"]),
   templateController.createTemplate
 );
 
 router.patch(
   "/:id",
   verifyToken,
-  requirePermission("MANAGE_TEMPLATES"),
+  requirePermission(["template:update", "MANAGE_TEMPLATES"]),
   templateController.updateTemplate
 );
 
 router.post(
   "/:id/publish",
   verifyToken,
-  requirePermission("MANAGE_TEMPLATES"),
+  requirePermission(["template:publish", "MANAGE_TEMPLATES"]),
   templateController.publishTemplate
 );
 
 router.post(
   "/:id/archive",
   verifyToken,
-  requirePermission("MANAGE_TEMPLATES"),
+  requirePermission(["template:archive", "MANAGE_TEMPLATES"]),
   templateController.archiveTemplate
 );
 
 router.post(
   "/:id/unarchive",
   verifyToken,
-  requirePermission("MANAGE_TEMPLATES"),
+  requirePermission(["template:unarchive", "MANAGE_TEMPLATES"]),
   templateController.unarchiveTemplate
+);
+
+router.delete(
+  "/:id",
+  verifyToken,
+  requirePermission(["template:archive", "template:update", "MANAGE_TEMPLATES"]),
+  templateController.deleteTemplate
 );
 
 export const TemplateRoutes = router;

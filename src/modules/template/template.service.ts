@@ -3,11 +3,31 @@ import { ApiError } from "../../utils/ApiError.js";
 import { cleanTemplateHtml, cleanTemplateCss } from "../../lib/sanitizeHtml.js";
 import { configSchema } from "./template.validation.js";
 import { BillingService } from "../payment/billing.service.js";
+import { uploadOnCloudinary } from "../../config/cloudinary.js";
 import type {
   ICreateTemplateInput,
   IUpdateTemplateInput,
   IListTemplateQuery,
 } from "./template.interface.js";
+
+const uploadBase64ToCloudinary = async (
+  dataUrl: string,
+  folder = "political_templates"
+): Promise<string> => {
+  if (!dataUrl || !dataUrl.startsWith("data:image/")) {
+    return dataUrl;
+  }
+  try {
+    const base64Data = dataUrl.split(";base64,").pop();
+    if (!base64Data) return dataUrl;
+    const buffer = Buffer.from(base64Data, "base64");
+    const result = await uploadOnCloudinary(buffer, folder);
+    return result.secure_url;
+  } catch (err) {
+    console.error("Cloudinary upload failed for template image, keeping original:", err);
+    return dataUrl;
+  }
+};
 
 const sanitizeConfig = (config: any) => {
   if (config?.type === "canvas") {
@@ -64,8 +84,24 @@ const createTemplate = async (data: ICreateTemplateInput, userId?: string) => {
     await validatePreviewAsset(data.previewAssetId, userId);
   }
 
+  let config = sanitizeConfig(data.config);
+  if (config?.type === "canvas") {
+    if (config.blankTemplateUrl?.startsWith("data:image/")) {
+      config.blankTemplateUrl = await uploadBase64ToCloudinary(
+        config.blankTemplateUrl,
+        "political_templates/canvas"
+      );
+    }
+    if (config.previewUrl?.startsWith("data:image/")) {
+      config.previewUrl = await uploadBase64ToCloudinary(
+        config.previewUrl,
+        "political_templates/previews"
+      );
+    }
+  }
+
   return prisma.template.create({
-    data: { ...data, config: sanitizeConfig(data.config), status: "DRAFT" },
+    data: { ...data, config, status: "DRAFT" },
   });
 };
 
@@ -100,8 +136,25 @@ const listTemplates = async (query: IListTemplateQuery) => {
     prisma.template.count({ where }),
   ]);
 
+  // Catalog isolation: optimize items payload by only returning previewUrl & lightweight config
+  const sanitizedItems = items.map((item) => {
+    const cfg = (item.config ?? {}) as any;
+    const previewUrl =
+      cfg.previewUrl ||
+      (!cfg.blankTemplateUrl?.startsWith("data:") ? cfg.blankTemplateUrl : undefined);
+
+    return {
+      ...item,
+      config: {
+        type: cfg.type,
+        previewUrl,
+        fields: cfg.fields,
+      },
+    };
+  });
+
   return {
-    items,
+    items: sanitizedItems,
     meta: {
       page: query.page,
       limit: query.limit,
@@ -177,9 +230,23 @@ const updateTemplate = async (
     await validatePreviewAsset(data.previewAssetId, userId);
   }
 
-  const updateData = data.config
-    ? { ...data, config: sanitizeConfig(data.config) }
-    : data;
+  let config = data.config ? sanitizeConfig(data.config) : undefined;
+  if (config?.type === "canvas") {
+    if (config.blankTemplateUrl?.startsWith("data:image/")) {
+      config.blankTemplateUrl = await uploadBase64ToCloudinary(
+        config.blankTemplateUrl,
+        "political_templates/canvas"
+      );
+    }
+    if (config.previewUrl?.startsWith("data:image/")) {
+      config.previewUrl = await uploadBase64ToCloudinary(
+        config.previewUrl,
+        "political_templates/previews"
+      );
+    }
+  }
+
+  const updateData = config ? { ...data, config } : data;
 
   return prisma.template.update({ where: { id }, data: updateData });
 };
@@ -228,6 +295,36 @@ const unarchiveTemplate = async (id: string) => {
   });
 };
 
+const deleteTemplate = async (id: string) => {
+  const template = await prisma.template.findUnique({
+    where: { id },
+    include: {
+      _count: {
+        select: {
+          posters: true,
+        },
+      },
+    },
+  });
+
+  if (!template) {
+    throw new ApiError(404, "Template not found");
+  }
+
+  // If posters already reference this template, archive it to preserve user history
+  if (template._count.posters > 0) {
+    return prisma.template.update({
+      where: { id },
+      data: { status: "ARCHIVED", archivedAt: new Date() },
+    });
+  }
+
+  // Otherwise, safely hard delete the template
+  return prisma.template.delete({
+    where: { id },
+  });
+};
+
 export const templateService = {
   createTemplate,
   listTemplates,
@@ -236,4 +333,5 @@ export const templateService = {
   publishTemplate,
   archiveTemplate,
   unarchiveTemplate,
+  deleteTemplate,
 };

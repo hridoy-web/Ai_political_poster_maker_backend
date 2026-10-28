@@ -96,6 +96,11 @@ const unarchiveTemplate = asyncHandler(async (req: Request, res: Response) => {
   sendResponse(res, 200, "Template unarchived successfully", true, null, data);
 });
 
+const deleteTemplate = asyncHandler(async (req: Request, res: Response) => {
+  const data = await templateService.deleteTemplate(req.params.id as string);
+  sendResponse(res, 200, "Template deleted successfully", true, null, data);
+});
+
 export const templateController = {
   createTemplate,
   listTemplates,
@@ -104,4 +109,5 @@ export const templateController = {
   publishTemplate,
   archiveTemplate,
   unarchiveTemplate,
+  deleteTemplate,
 };

@@ -50,6 +50,8 @@ export const textSlotSchema = z.object({
   defaultText: z.string().optional().default(""),
   x: z.number(),
   y: z.number(),
+  width: z.number().optional(),
+  height: z.number().optional(),
   maxWidth: z.number().optional(),
   fontSize: z.number().default(32),
   fontFamily: z.string().default("Hind Siliguri"),
