@@ -148,6 +148,11 @@ const listTemplates = async (query: IListTemplateQuery) => {
       config: {
         type: cfg.type,
         previewUrl,
+        blankTemplateUrl: cfg.blankTemplateUrl,
+        photoSlots: cfg.photoSlots,
+        textSlots: cfg.textSlots,
+        width: cfg.width || item.width,
+        height: cfg.height || item.height,
         fields: cfg.fields,
       },
     };
