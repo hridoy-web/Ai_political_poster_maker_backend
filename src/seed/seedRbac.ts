@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+
 const permissions = [
   { key: "admin:users:read", description: "View the user list" },
   { key: "admin:users:manage", description: "Manage user accounts and statuses" },
@@ -12,8 +13,10 @@ const permissions = [
   { key: "template:publish", description: "Publish templates" },
   { key: "template:archive", description: "Archive templates" },
   { key: "template:unarchive", description: "Restore archived templates" },
+  { key: "package:create", description: "Create credit and subscription packages" },
   { key: "rbac:manage", description: "Manage roles and permissions" },
 ] as const;
+
 const templatePermissions = [
   "template:create",
   "template:update",
@@ -37,10 +40,11 @@ const roles = [
   },
   {
     name: "ADMIN",
-    description: "Manage users, categories, and templates",
+    description: "Manage users, categories, templates, and packages",
     permissionKeys: [
       "admin:users:read",
       "admin:users:manage",
+      "package:create",
       ...categoryPermissions,
       ...templatePermissions,
     ],
@@ -56,6 +60,7 @@ const roles = [
     permissionKeys: [],
   },
 ] as const;
+
 async function main() {
   await prisma.$transaction(
     async (tx) => {
