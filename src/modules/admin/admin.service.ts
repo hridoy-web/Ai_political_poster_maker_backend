@@ -228,9 +228,243 @@ const updateUserStatus = async (userId: string, status: AccountStatus) => {
   return updatedUser;
 };
 
+const getOverviewAnalytics = async () => {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const [
+    totalUsers,
+    todayUsers,
+    totalPosters,
+    todayPosters,
+    totalTemplates,
+    successfulPayments,
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { createdAt: { gte: startOfToday } } }),
+    prisma.poster.count(),
+    prisma.poster.count({ where: { createdAt: { gte: startOfToday } } }),
+    prisma.template.count({ where: { status: "PUBLISHED" } }),
+    prisma.payment.findMany({
+      where: {
+        status: "SUCCEEDED",
+      },
+      select: {
+        amount: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
+  let totalRevenue = 0;
+  let monthRevenue = 0;
+  let todayRevenue = 0;
+
+  for (const p of successfulPayments) {
+    const amt = Number(p.amount || 0);
+    totalRevenue += amt;
+    if (p.createdAt >= startOfMonth) {
+      monthRevenue += amt;
+    }
+    if (p.createdAt >= startOfToday) {
+      todayRevenue += amt;
+    }
+  }
+
+  // Last 5-7 days daily revenue for charts
+  const dailyMap = new Map<string, number>();
+  for (let i = 4; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i * 2);
+    const key = `${d.getDate()} অক`;
+    dailyMap.set(key, 0);
+  }
+
+  for (const p of successfulPayments) {
+    const key = `${p.createdAt.getDate()} অক`;
+    if (dailyMap.has(key)) {
+      dailyMap.set(key, (dailyMap.get(key) || 0) + Number(p.amount || 0));
+    }
+  }
+
+  const dailyRevenue = Array.from(dailyMap.entries()).map(([day, revenue]) => ({
+    day,
+    revenue,
+  }));
+
+  return {
+    todayRevenue,
+    monthRevenue,
+    totalRevenue,
+    totalUsers,
+    todayUsers,
+    totalPosters,
+    todayPosters,
+    totalTemplates,
+    dailyRevenue,
+  };
+};
+
+const getPosters = async (query: any) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
+  const skip = (page - 1) * limit;
+
+  const where: any = {};
+  if (query.search && query.search.trim()) {
+    const search = query.search.trim();
+    where.OR = [
+      { template: { title: { contains: search, mode: "insensitive" } } },
+      { user: { name: { contains: search, mode: "insensitive" } } },
+      { user: { email: { contains: search, mode: "insensitive" } } },
+    ];
+  }
+
+  const [posters, total] = await Promise.all([
+    prisma.poster.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        user: { select: { name: true, email: true } },
+        template: { select: { title: true, category: { select: { name: true } } } },
+        output: true,
+        preview: true,
+      },
+    }),
+    prisma.poster.count({ where }),
+  ]);
+
+  const items = posters.map((p) => {
+    const input = (p.inputData as any) || {};
+    const title = input.candidateName
+      ? `${input.candidateName} - নির্বাচনী পোস্টার`
+      : p.template?.title || "রাজনৈতিক পোস্টার";
+
+    let formattedDate = "তারিখ অনুপলব্ধ";
+    if (p.createdAt) {
+      try {
+        formattedDate = new Intl.DateTimeFormat("bn-BD", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        }).format(new Date(p.createdAt));
+      } catch {
+        formattedDate = String(p.createdAt).slice(0, 10);
+      }
+    }
+
+    const imageUrl =
+      p.output?.storageKey ||
+      p.preview?.storageKey ||
+      input.photoUrl ||
+      "/image/images26.jpg";
+
+    return {
+      id: p.id,
+      title,
+      userName: p.user?.name || "অতিথি ব্যবহারকারী",
+      userEmail: p.user?.email || "guest@posterai.app",
+      imageUrl,
+      createdAt: formattedDate,
+      category: p.template?.category?.name || "রাজনৈতিক",
+    };
+  });
+
+  return {
+    items,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+};
+
+const getTransactions = async (query: any) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
+  const skip = (page - 1) * limit;
+
+  const where: any = {};
+  if (query.search && query.search.trim()) {
+    const search = query.search.trim();
+    where.OR = [
+      { tranId: { contains: search, mode: "insensitive" } },
+      { user: { name: { contains: search, mode: "insensitive" } } },
+      { user: { email: { contains: search, mode: "insensitive" } } },
+      { providerReference: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  const [payments, total] = await Promise.all([
+    prisma.payment.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        user: { select: { name: true, email: true } },
+      },
+    }),
+    prisma.payment.count({ where }),
+  ]);
+
+  const items = payments.map((p) => {
+    let method: "bKash" | "Nagad" | "Card" = "bKash";
+    const ref = (p.providerReference || "").toLowerCase();
+    if (ref.includes("nagad")) method = "Nagad";
+    else if (ref.includes("card") || ref.includes("visa") || ref.includes("master")) method = "Card";
+
+    let status: "Successful" | "Failed" | "Pending" = "Pending";
+    if (p.status === "SUCCEEDED") status = "Successful";
+    else if (p.status === "FAILED" || p.status === "CANCELLED") status = "Failed";
+
+    let formattedDate = "তারিখ অনুপলব্ধ";
+    if (p.createdAt) {
+      try {
+        formattedDate = new Intl.DateTimeFormat("bn-BD", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        }).format(new Date(p.createdAt));
+      } catch {
+        formattedDate = String(p.createdAt).slice(0, 10);
+      }
+    }
+
+    return {
+      id: p.id,
+      trxId: p.tranId,
+      method,
+      amount: Number(p.amount || 0),
+      status,
+      date: formattedDate,
+      userName: p.user?.name || "ব্যবহারকারী",
+      userEmail: p.user?.email || "",
+    };
+  });
+
+  return {
+    items,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+};
+
 export const adminService = {
   getUsers,
   getUserById,
   updateUserRole,
   updateUserStatus,
+  getOverviewAnalytics,
+  getPosters,
+  getTransactions,
 };

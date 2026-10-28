@@ -15,6 +15,8 @@ import { transactionRoutes } from "../modules/transaction/transaction.routes.js"
 import { subscriptionRoutes } from "../modules/subscription/subscription.routes.js";
 import adminRouter from "../modules/admin/route.js";
 import rbacRouter from "../modules/rbac/route.js";
+import contactRouter from "../modules/contact/contact.route.js";
+import publicRouter from "../modules/public/public.route.js";
 
 const router = Router();
 
@@ -27,6 +29,10 @@ router.use("/bookmarks", bookmarkRouter);
 router.use("/ai", aiRouter);
 router.use("/posters", posterRoutes);
 router.use("/guest", guestRouter);
+
+// Public & Contact Routes
+router.use("/contact", contactRouter);
+router.use("/public", publicRouter);
 
 // Dev 2: Admin & RBAC Routes
 router.use("/admin", adminRouter);

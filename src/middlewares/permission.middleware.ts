@@ -41,8 +41,10 @@ export const requirePermission = (requiredPermission: string | string[]) => {
         },
       });
 
-      // If user has "SUPER_ADMIN" role, bypass and call next().
-      const isSuperAdmin = userRoles.some((ur) => ur.role?.name === "SUPER_ADMIN");
+      // If user has "SUPER_ADMIN" or "ADMIN" role, bypass and call next().
+      const isSuperAdmin = userRoles.some(
+        (ur) => ur.role?.name === "SUPER_ADMIN" || ur.role?.name === "ADMIN"
+      );
       if (isSuperAdmin) {
         next();
         return;

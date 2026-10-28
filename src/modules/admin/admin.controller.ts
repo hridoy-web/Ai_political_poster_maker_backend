@@ -29,9 +29,27 @@ const updateUserStatus = asyncHandler(async (req: Request, res: Response) => {
   sendResponse(res, 200, "User status updated successfully", true, null, result);
 });
 
+const getOverviewAnalytics = asyncHandler(async (req: Request, res: Response) => {
+  const result = await adminService.getOverviewAnalytics();
+  sendResponse(res, 200, "Admin overview analytics retrieved successfully", true, null, result);
+});
+
+const getPosters = asyncHandler(async (req: Request, res: Response) => {
+  const result = await adminService.getPosters(req.query);
+  sendResponse(res, 200, "Admin posters retrieved successfully", true, null, result);
+});
+
+const getTransactions = asyncHandler(async (req: Request, res: Response) => {
+  const result = await adminService.getTransactions(req.query);
+  sendResponse(res, 200, "Admin transactions retrieved successfully", true, null, result);
+});
+
 export const adminController = {
   getUsers,
   getUserById,
   updateUserRole,
   updateUserStatus,
+  getOverviewAnalytics,
+  getPosters,
+  getTransactions,
 };

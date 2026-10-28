@@ -55,13 +55,13 @@ export const optionalAuth = async (
 
 export const verifyToken = asyncHandler(
   async (req: Request, _res: Response, next: NextFunction) => {
-    // UPDATE: আগে getToken() cookie থেকে token ফেরাত,
-    // কিন্তু token-এর type ও empty value আলাদা করে যাচাই করত না।
-    const token: unknown = req.cookies?.token;
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader?.startsWith("Bearer ")
+      ? authHeader.split(" ")[1]
+      : null;
+    const token: unknown = req.cookies?.token || bearerToken;
 
     if (typeof token !== "string" || token.length === 0) {
-      // UPDATE: আগে এখানে সরাসরি res.status(401).json(...) ছিল।
-      // এখন ApiError ব্যবহার করছি, যাতে error.middleware response সামলায়।
       throw new ApiError(401, "Please log in to continue");
     }
 

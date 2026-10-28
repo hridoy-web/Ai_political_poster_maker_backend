@@ -1,11 +1,12 @@
 import type { Request, Response } from "express";
 import sharp from "sharp";
+import bcrypt from "bcryptjs";
 import { ApiError } from "../../utils/ApiError.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import sendResponse from "../../utils/sendResponse.js";
 import { prisma } from "../../config/db.js";
 import cloudinary, { uploadOnCloudinary } from "../../config/cloudinary.js";
-import { cookieOptions } from "../auth/auth.service.js";
+import { cookieOptions, hashPassword } from "../auth/auth.service.js";
 import { anonymizeUserAccount } from "./user.service.js";
 
 export const getCurrentUser = asyncHandler(
@@ -21,6 +22,9 @@ export const getCurrentUser = asyncHandler(
         name: true,
         email: true,
         status: true,
+        title: true,
+        area: true,
+        userProfile: true,
         avatarAssetId: true,
         avatar: true,
         roles: {
@@ -41,6 +45,16 @@ export const getCurrentUser = asyncHandler(
 
     const roleNames = user.roles?.map((r) => r.role?.name).filter(Boolean) || [];
 
+    let phone = "";
+    if (user.userProfile) {
+      try {
+        const parsed = JSON.parse(user.userProfile);
+        phone = parsed.phone || "";
+      } catch {
+        phone = user.userProfile;
+      }
+    }
+
     return sendResponse(
       res,
       200,
@@ -51,6 +65,9 @@ export const getCurrentUser = asyncHandler(
         id: user.id,
         name: user.name,
         email: user.email,
+        phone,
+        title: user.title,
+        area: user.area,
         status: user.status,
         avatarAssetId: user.avatarAssetId,
         avatar: user.avatar,
@@ -71,17 +88,23 @@ export const updateProfile = asyncHandler(
         throw new ApiError(401, "Unauthorized");
       }
 
-      const { name } = req.body;
+      const { name, phone, title, area } = req.body;
 
-      // Validate name
+      // Validate name if provided
       if (name !== undefined) {
         if (typeof name !== "string" || !name.trim()) {
           throw new ApiError(400, "Name cannot be empty");
         }
       }
 
-      if (name === undefined && !req.file) {
-        throw new ApiError(400, "Provide name or profile image to update");
+      if (
+        name === undefined &&
+        phone === undefined &&
+        title === undefined &&
+        area === undefined &&
+        !req.file
+      ) {
+        throw new ApiError(400, "Provide profile fields or profile image to update");
       }
 
       // Find existing user
@@ -91,6 +114,7 @@ export const updateProfile = asyncHandler(
           id: true,
           name: true,
           email: true,
+          userProfile: true,
           avatarAssetId: true,
         },
       });
@@ -98,6 +122,26 @@ export const updateProfile = asyncHandler(
       if (!existingUser) {
         throw new ApiError(404, "User not found");
       }
+
+      let updatedUserProfile: string | undefined = undefined;
+      if (phone !== undefined) {
+        let existingObj: Record<string, any> = {};
+        if (existingUser.userProfile) {
+          try {
+            existingObj = JSON.parse(existingUser.userProfile);
+          } catch {
+            existingObj = { bio: existingUser.userProfile };
+          }
+        }
+        existingObj.phone = String(phone).trim();
+        updatedUserProfile = JSON.stringify(existingObj);
+      }
+
+      const updateData: Record<string, any> = {};
+      if (name !== undefined) updateData.name = name.trim();
+      if (title !== undefined) updateData.title = String(title).trim();
+      if (area !== undefined) updateData.area = String(area).trim();
+      if (updatedUserProfile !== undefined) updateData.userProfile = updatedUserProfile;
 
       let oldPublicId: string | null = null;
 
@@ -124,8 +168,7 @@ export const updateProfile = asyncHandler(
           oldPublicId = oldAsset?.storageKey ?? null;
         }
 
-        // নতুন Asset ও User-এর avatar relation একই transaction-এ save করি।
-        // Database update ব্যর্থ হলে transaction rollback হবে; নতুন Cloudinary file cleanup হবে।
+        // Save new Asset and User update in transaction
         await prisma.$transaction(async (tx) => {
           const asset = await tx.asset.create({
             data: {
@@ -141,14 +184,14 @@ export const updateProfile = asyncHandler(
           await tx.user.update({
             where: { id: existingUser.id },
             data: {
-              ...(name !== undefined && { name: name.trim() }),
+              ...updateData,
               avatarAssetId: asset.id,
             },
           });
         });
         profileUpdateCommitted = true;
 
-        // নতুন avatar save হওয়ার পর পুরোনো image cleanup করি।
+        // Cleanup old image if exists
         if (existingUser.avatarAssetId) {
           try {
             await prisma.asset.delete({
@@ -159,18 +202,17 @@ export const updateProfile = asyncHandler(
               await cloudinary.uploader.destroy(oldPublicId);
             }
           } catch (error) {
-            // Cleanup ব্যর্থ হলেও নতুন profile image অক্ষত রাখি।
             console.error("Old profile image cleanup error:", error);
           }
         }
       } else {
-        // Update name only
-        await prisma.user.update({
-          where: { id: existingUser.id },
-          data: {
-            name: name.trim(),
-          },
-        });
+        // Update profile fields only
+        if (Object.keys(updateData).length > 0) {
+          await prisma.user.update({
+            where: { id: existingUser.id },
+            data: updateData,
+          });
+        }
         profileUpdateCommitted = true;
       }
 
@@ -182,10 +224,23 @@ export const updateProfile = asyncHandler(
           name: true,
           email: true,
           status: true,
+          title: true,
+          area: true,
+          userProfile: true,
           avatarAssetId: true,
           avatar: true,
         },
       });
+
+      let responsePhone = "";
+      if (updatedUser?.userProfile) {
+        try {
+          const parsed = JSON.parse(updatedUser.userProfile);
+          responsePhone = parsed.phone || "";
+        } catch {
+          responsePhone = updatedUser.userProfile;
+        }
+      }
 
       return sendResponse(
         res,
@@ -193,7 +248,10 @@ export const updateProfile = asyncHandler(
         "Profile updated successfully",
         true,
         null,
-        updatedUser,
+        {
+          ...updatedUser,
+          phone: responsePhone,
+        },
       );
     } catch (error) {
       // Clean up newly uploaded image if update fails
@@ -207,6 +265,52 @@ export const updateProfile = asyncHandler(
 
       throw error;
     }
+  },
+);
+
+export const changePassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    if (!req.user) {
+      throw new ApiError(401, "Unauthorized");
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      throw new ApiError(400, "বর্তমান পাসওয়ার্ড এবং নতুন পাসওয়ার্ড উভয়ই প্রদান করুন");
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, password: true },
+    });
+
+    if (!user) {
+      throw new ApiError(404, "ব্যবহারকারী খুঁজে পাওয়া যায়নি");
+    }
+
+    const isCurrentValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentValid) {
+      throw new ApiError(400, "বর্তমান পাসওয়ার্ড সঠিক নয়");
+    }
+
+    if (typeof newPassword !== "string" || newPassword.length < 8) {
+      throw new ApiError(400, "নতুন পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে");
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedPassword },
+    });
+
+    return sendResponse(
+      res,
+      200,
+      "পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে",
+      true,
+      null,
+      null,
+    );
   },
 );
 
