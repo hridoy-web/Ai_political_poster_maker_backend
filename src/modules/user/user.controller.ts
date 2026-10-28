@@ -23,6 +23,15 @@ export const getCurrentUser = asyncHandler(
         status: true,
         avatarAssetId: true,
         avatar: true,
+        roles: {
+          select: {
+            role: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -30,13 +39,24 @@ export const getCurrentUser = asyncHandler(
       throw new ApiError(404, "User not found");
     }
 
+    const roleNames = user.roles?.map((r) => r.role?.name).filter(Boolean) || [];
+
     return sendResponse(
       res,
       200,
       "User fetched successfully",
       true,
       null,
-      user,
+      {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        status: user.status,
+        avatarAssetId: user.avatarAssetId,
+        avatar: user.avatar,
+        roles: roleNames,
+        roleNames,
+      },
     );
   },
 );

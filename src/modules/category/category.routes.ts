@@ -12,28 +12,28 @@ router.get("/", categoryController.listCategories);
 router.post(
   "/",
   verifyToken,
-  requirePermission("MANAGE_CATEGORIES"),
+  requirePermission(["category:create", "MANAGE_CATEGORIES"]),
   categoryController.createCategory
 );
 
 router.get(
   "/admin/all",
   verifyToken,
-  requirePermission("MANAGE_CATEGORIES"),
+  requirePermission(["category:read:all", "MANAGE_CATEGORIES"]),
   categoryController.listAllCategories
 );
 
 router.patch(
   "/:id",
   verifyToken,
-  requirePermission("MANAGE_CATEGORIES"),
+  requirePermission(["category:update", "MANAGE_CATEGORIES"]),
   categoryController.updateCategory
 );
 
 router.patch(
   "/:id/status",
   verifyToken,
-  requirePermission("MANAGE_CATEGORIES"),
+  requirePermission(["category:status:update", "MANAGE_CATEGORIES"]),
   categoryController.setCategoryStatus
 );
 

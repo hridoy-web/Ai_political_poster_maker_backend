@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
  * Middleware factory for Role-Based Access Control (RBAC).
  * Enforces permission requirements on routes based on assigned roles.
  */
-export const requirePermission = (requiredPermission: string) => {
+export const requirePermission = (requiredPermission: string | string[]) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Contract with Dev 1 (Shakil's auth.middleware):
@@ -48,9 +48,36 @@ export const requirePermission = (requiredPermission: string) => {
         return;
       }
 
-      // If user has the matching requiredPermission key, call next().
+      // Prepare list of acceptable permission keys
+      const requiredList = Array.isArray(requiredPermission)
+        ? [...requiredPermission]
+        : [requiredPermission];
+
+      // Handle aliases to support template and category manager operations
+      if (requiredList.includes("MANAGE_TEMPLATES")) {
+        requiredList.push(
+          "template:create",
+          "template:update",
+          "template:publish",
+          "template:archive",
+          "template:unarchive",
+          "template:delete"
+        );
+      }
+      if (requiredList.includes("MANAGE_CATEGORIES")) {
+        requiredList.push(
+          "category:create",
+          "category:update",
+          "category:status:update",
+          "category:read:all"
+        );
+      }
+
+      // If user has any matching permission key, call next().
       const hasPermission = userRoles.some((ur) =>
-        ur.role?.permissions.some((rp) => rp.permission?.key === requiredPermission)
+        ur.role?.permissions.some(
+          (rp) => rp.permission?.key && requiredList.includes(rp.permission.key)
+        )
       );
 
       if (hasPermission) {

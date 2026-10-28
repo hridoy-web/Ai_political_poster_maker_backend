@@ -179,6 +179,15 @@ export const loginUser = async (
       email: true,
       password: true,
       status: true,
+      roles: {
+        select: {
+          role: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -200,12 +209,15 @@ export const loginUser = async (
   await claimGuestSessionForUser(guestToken, user.id);
 
   const token = generateToken(user.id);
+  const roleNames = user.roles?.map((r) => r.role?.name).filter(Boolean) || [];
 
   return {
     user: {
       id: user.id,
       name: user.name,
       email: user.email,
+      roles: roleNames,
+      roleNames,
     },
     token,
   };
