@@ -44,12 +44,25 @@ const getTransactions = asyncHandler(async (req: Request, res: Response) => {
   sendResponse(res, 200, "Admin transactions retrieved successfully", true, null, result);
 });
 
+const getAllRoles = asyncHandler(async (_req: Request, res: Response) => {
+  const result = await adminService.getAllRoles();
+  sendResponse(res, 200, "Roles retrieved successfully", true, null, result);
+});
+
+const deletePoster = asyncHandler(async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const result = await adminService.deletePoster(id);
+  sendResponse(res, 200, "Poster deleted successfully", true, null, result);
+});
+
 export const adminController = {
   getUsers,
   getUserById,
+  getAllRoles,
   updateUserRole,
   updateUserStatus,
   getOverviewAnalytics,
   getPosters,
+  deletePoster,
   getTransactions,
 };

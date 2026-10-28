@@ -1,6 +1,7 @@
 import { AccountStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { ApiError } from "../../utils/ApiError.js";
+import { storageService } from "../../services/storage/storage.service.js";
 
 interface GetUsersQuery {
   page?: number | string;
@@ -62,6 +63,22 @@ const getUsers = async (query: GetUsersQuery) => {
         area: true,
         createdAt: true,
         updatedAt: true,
+        wallet: {
+          select: {
+            balance: true,
+            currency: true,
+          },
+        },
+        creditWallet: {
+          select: {
+            balance: true,
+          },
+        },
+        _count: {
+          select: {
+            posters: true,
+          },
+        },
         roles: {
           select: {
             role: {
@@ -79,16 +96,19 @@ const getUsers = async (query: GetUsersQuery) => {
     prisma.user.count({ where }),
   ]);
 
-  const items = users.map((u) => ({
+  const items = users.map((u: any) => ({
     id: u.id,
     name: u.name,
     email: u.email,
     status: u.status,
     title: u.title,
     area: u.area,
+    balance: Number(u.wallet?.balance || 0),
+    credits: Number(u.creditWallet?.balance || 0),
+    totalPosters: u._count?.posters || 0,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
-    roles: u.roles.map((r) => r.role),
+    roles: (u.roles || []).map((r: any) => r.role),
   }));
 
   return {
@@ -102,8 +122,21 @@ const getUsers = async (query: GetUsersQuery) => {
   };
 };
 
+const getAllRoles = async () => {
+  const roles = await prisma.role.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      isSystem: true,
+    },
+  });
+  return roles;
+};
+
 const getUserById = async (id: string) => {
-  const user = await prisma.user.findUnique({
+  const user: any = await prisma.user.findUnique({
     where: { id },
     select: {
       id: true,
@@ -114,6 +147,22 @@ const getUserById = async (id: string) => {
       area: true,
       createdAt: true,
       updatedAt: true,
+      wallet: {
+        select: {
+          balance: true,
+          currency: true,
+        },
+      },
+      creditWallet: {
+        select: {
+          balance: true,
+        },
+      },
+      _count: {
+        select: {
+          posters: true,
+        },
+      },
       roles: {
         select: {
           role: {
@@ -135,7 +184,10 @@ const getUserById = async (id: string) => {
 
   return {
     ...user,
-    roles: user.roles.map((r) => r.role),
+    balance: Number(user.wallet?.balance || 0),
+    credits: Number(user.creditWallet?.balance || 0),
+    totalPosters: user._count?.posters || 0,
+    roles: (user.roles || []).map((r: any) => r.role),
   };
 };
 
@@ -243,8 +295,8 @@ const getOverviewAnalytics = async () => {
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { createdAt: { gte: startOfToday } } }),
-    prisma.poster.count(),
-    prisma.poster.count({ where: { createdAt: { gte: startOfToday } } }),
+    prisma.poster.count({ where: { deletedAt: null, status: { not: "DELETED" } } }),
+    prisma.poster.count({ where: { createdAt: { gte: startOfToday }, deletedAt: null, status: { not: "DELETED" } } }),
     prisma.template.count({ where: { status: "PUBLISHED" } }),
     prisma.payment.findMany({
       where: {
@@ -272,26 +324,27 @@ const getOverviewAnalytics = async () => {
     }
   }
 
-  // Last 5-7 days daily revenue for charts
-  const dailyMap = new Map<string, number>();
-  for (let i = 4; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i * 2);
-    const key = `${d.getDate()} অক`;
-    dailyMap.set(key, 0);
-  }
+  // Last 7 days dynamic daily revenue calculation (formatted in Bengali month/day)
+  const monthNames = [
+    "জানু", "ফেব্রু", "মার্চ", "এপ্রিল", "মে", "জুন",
+    "জুলাই", "আগস্ট", "সেপ্টে", "অক্টো", "নভে", "ডিসে"
+  ];
 
-  for (const p of successfulPayments) {
-    const key = `${p.createdAt.getDate()} অক`;
-    if (dailyMap.has(key)) {
-      dailyMap.set(key, (dailyMap.get(key) || 0) + Number(p.amount || 0));
-    }
-  }
+  const dailyRevenue: Array<{ day: string; revenue: number }> = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    const nextD = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1);
 
-  const dailyRevenue = Array.from(dailyMap.entries()).map(([day, revenue]) => ({
-    day,
-    revenue,
-  }));
+    const dayLabel = `${d.getDate()} ${monthNames[d.getMonth()]}`;
+    const dayRevenue = successfulPayments
+      .filter((p) => p.createdAt >= d && p.createdAt < nextD)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    dailyRevenue.push({
+      day: dayLabel,
+      revenue: dayRevenue,
+    });
+  }
 
   return {
     todayRevenue,
@@ -306,12 +359,33 @@ const getOverviewAnalytics = async () => {
   };
 };
 
+const deletePoster = async (posterId: string) => {
+  const poster = await prisma.poster.findUnique({
+    where: { id: posterId },
+  });
+  if (!poster) {
+    throw new ApiError(404, "Poster not found");
+  }
+
+  return prisma.poster.update({
+    where: { id: posterId },
+    data: {
+      deletedAt: new Date(),
+      status: "DELETED",
+    },
+  });
+};
+
 const getPosters = async (query: any) => {
   const page = Math.max(1, Number(query.page) || 1);
   const limit = Math.max(1, Math.min(100, Number(query.limit) || 10));
   const skip = (page - 1) * limit;
 
-  const where: any = {};
+  const where: any = {
+    deletedAt: null,
+    status: { not: "DELETED" },
+  };
+
   if (query.search && query.search.trim()) {
     const search = query.search.trim();
     where.OR = [
@@ -356,9 +430,9 @@ const getPosters = async (query: any) => {
       }
     }
 
+    const rawKey = p.output?.storageKey || p.preview?.storageKey;
     const imageUrl =
-      p.output?.storageKey ||
-      p.preview?.storageKey ||
+      (rawKey ? storageService.getSecureUrl(rawKey) : null) ||
       input.photoUrl ||
       "/image/images26.jpg";
 
@@ -462,9 +536,11 @@ const getTransactions = async (query: any) => {
 export const adminService = {
   getUsers,
   getUserById,
+  getAllRoles,
   updateUserRole,
   updateUserStatus,
   getOverviewAnalytics,
   getPosters,
+  deletePoster,
   getTransactions,
 };
