@@ -25,8 +25,15 @@ async function startServer(): Promise<void> {
       if (aiWorkerTimer) clearInterval(aiWorkerTimer);
       if (posterWorkerTimer) clearInterval(posterWorkerTimer);
       if (cleanupTimer) clearInterval(cleanupTimer);
-      server.close(() => {
-        console.log("[Server] Closed out remaining connections.");
+
+      server.close(async () => {
+        console.log("[Server] Closed out remaining HTTP connections.");
+        try {
+          await prisma.$disconnect();
+          console.log("[Server] Disconnected database pool cleanly.");
+        } catch (dbErr) {
+          console.error("[Server] Error disconnecting database pool:", dbErr);
+        }
         process.exit(0);
       });
     };

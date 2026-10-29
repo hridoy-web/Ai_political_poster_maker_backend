@@ -228,7 +228,7 @@ class AiService {
     });
 
     if (existing) {
-      this.assertTaskOwner(existing, authContext);
+      await this.assertTaskOwner(existing, authContext);
 
       return {
         taskId: existing.id,
@@ -305,17 +305,17 @@ class AiService {
       throw new ApiError(404, "AI task not found");
     }
 
-    this.assertTaskOwner(task, authContext);
+    await this.assertTaskOwner(task, authContext);
 
     const { userId, guestSessionId, ...safeTask } = task;
     return safeTask;
   }
 
   // AI task ID বা idempotency key দিয়ে result/status অন্য owner-কে দেওয়া হয় না।
-  private assertTaskOwner(
+  private async assertTaskOwner(
     task: { userId: string | null; guestSessionId: string | null },
     authContext: IAuthContext,
-  ): void {
+  ): Promise<void> {
     const isUserOwner = Boolean(
       task.userId && task.userId === authContext.userId,
     );
@@ -324,12 +324,30 @@ class AiService {
         task.guestSessionId === authContext.guestSessionId,
     );
 
-    if (!isUserOwner && !isGuestOwner && authContext.role !== "ADMIN") {
-      throw new ApiError(
-        403,
-        "Forbidden: You do not have permission to access this task",
-      );
+    if (isUserOwner || isGuestOwner) {
+      return;
     }
+
+    // Check if user has administrative privileges (ADMIN or SUPER_ADMIN) in the database
+    if (authContext.userId) {
+      const adminRole = await prisma.userRole.findFirst({
+        where: {
+          userId: authContext.userId,
+          role: {
+            name: { in: ["ADMIN", "SUPER_ADMIN"] },
+          },
+        },
+      });
+
+      if (adminRole) {
+        return;
+      }
+    }
+
+    throw new ApiError(
+      403,
+      "Forbidden: You do not have permission to access this task",
+    );
   }
 
   /**

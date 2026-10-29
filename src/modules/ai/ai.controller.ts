@@ -23,13 +23,10 @@ const validateData = <T>(schema: ZodSchema<T>, data: unknown): T => {
 };
 
 const extractAuthContext = (req: Request) => {
-  const userId = (req as any).user?.id as string | undefined;
-  const role = (req as any).user?.role as string | undefined;
-
-  // Guest ID middleware-এ যাচাই হয়ে request-এ এসেছে।
+  const userId = req.user?.id;
   const guestSessionId = req.guestSessionId;
 
-  return { userId, guestSessionId, role };
+  return { userId, guestSessionId };
 };
 
 const generateSlogans = asyncHandler(async (req: Request, res: Response) => {
