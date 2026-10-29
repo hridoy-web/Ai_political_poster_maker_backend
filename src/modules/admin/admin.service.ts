@@ -272,26 +272,34 @@ const getOverviewAnalytics = async () => {
     }
   }
 
-  // Last 5-7 days daily revenue for charts
-  const dailyMap = new Map<string, number>();
-  for (let i = 4; i >= 0; i--) {
+  // Last 7 consecutive days daily revenue for charts
+  const daysCount = 7;
+  const dailyBuckets = new Map<string, { day: string; revenue: number }>();
+
+  for (let i = daysCount - 1; i >= 0; i--) {
     const d = new Date(now);
-    d.setDate(d.getDate() - i * 2);
-    const key = `${d.getDate()} অক`;
-    dailyMap.set(key, 0);
+    d.setDate(d.getDate() - i);
+    const dateKey = d.toISOString().split("T")[0]; // "YYYY-MM-DD"
+
+    let label: string;
+    try {
+      label = d.toLocaleDateString("bn-BD", { day: "numeric", month: "short" });
+    } catch {
+      label = `${d.getDate()} ${d.toLocaleString("en-US", { month: "short" })}`;
+    }
+
+    dailyBuckets.set(dateKey, { day: label, revenue: 0 });
   }
 
   for (const p of successfulPayments) {
-    const key = `${p.createdAt.getDate()} অক`;
-    if (dailyMap.has(key)) {
-      dailyMap.set(key, (dailyMap.get(key) || 0) + Number(p.amount || 0));
+    const paymentDateKey = p.createdAt.toISOString().split("T")[0];
+    const bucket = dailyBuckets.get(paymentDateKey);
+    if (bucket) {
+      bucket.revenue += Number(p.amount || 0);
     }
   }
 
-  const dailyRevenue = Array.from(dailyMap.entries()).map(([day, revenue]) => ({
-    day,
-    revenue,
-  }));
+  const dailyRevenue = Array.from(dailyBuckets.values());
 
   return {
     todayRevenue,
@@ -439,6 +447,9 @@ const getTransactions = async (query: any) => {
     return {
       id: p.id,
       trxId: p.tranId,
+      gatewayTrxId: p.bankTranId || p.providerReference || p.tranId,
+      customerPhone: p.customerPhone || null,
+      valId: p.valId || null,
       method,
       amount: Number(p.amount || 0),
       status,
@@ -459,12 +470,34 @@ const getTransactions = async (query: any) => {
   };
 };
 
+const getVisitorAnalytics = async () => {
+  const now = new Date();
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const [last24Hours, last7Days, last30Days, lifetime] = await Promise.all([
+    prisma.visitorLog.count({ where: { createdAt: { gte: oneDayAgo } } }),
+    prisma.visitorLog.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+    prisma.visitorLog.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.visitorLog.count(),
+  ]);
+
+  return {
+    last24Hours,
+    last7Days,
+    last30Days,
+    lifetime,
+  };
+};
+
 export const adminService = {
   getUsers,
   getUserById,
   updateUserRole,
   updateUserStatus,
   getOverviewAnalytics,
+  getVisitorAnalytics,
   getPosters,
   getTransactions,
 };

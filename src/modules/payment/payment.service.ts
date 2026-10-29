@@ -5,7 +5,7 @@ import { initSSLCommerzPayment, validateSSLCommerzPayment } from './sslcommerz.a
 
 export const initiatePaymentSession = async (
     userId: string,
-    data: { packageId?: string; customAmount?: number; paymentMethod?: string }
+    data: { packageId?: string; customAmount?: number; paymentMethod?: string; customerPhone?: string }
 ) => {
     let amount = 0;
     let packageId: string | null = null;
@@ -47,6 +47,7 @@ export const initiatePaymentSession = async (
         data: {
             userId,
             packageId,
+            customerPhone: data.customerPhone || null,
             amount,
             currency: 'BDT',
             provider: 'SSLCOMMERZ',
@@ -67,7 +68,7 @@ export const initiatePaymentSession = async (
         ipn_url: `${backendUrl}/api/v1/payments/webhook/sslcommerz`,
         cus_name: user?.name || 'PosterAI User',
         cus_email: user?.email || 'user@posterai.com',
-        cus_phone: '01700000000',
+        cus_phone: data.customerPhone || '01700000000',
         paymentMethod: data.paymentMethod,
     });
 
@@ -138,12 +139,28 @@ export const verifyAndFulfillPayment = async (valId: string, tranId: string) => 
             throw new ApiError(400, 'Transaction amount discrepancy detected');
         }
 
+        // Extract customer phone and gateway transaction ID from validationRes with priority hierarchy
+        const isCleanPhone = (val?: string | null): val is string =>
+            Boolean(val && /^01[3-9]\d{8}$/.test(val.trim()));
+
+        const customerPhone =
+            (isCleanPhone(validationRes.cus_phone) ? validationRes.cus_phone.trim() : null) ||
+            (isCleanPhone(payment.customerPhone) ? payment.customerPhone.trim() : null) ||
+            (isCleanPhone(validationRes.card_no) ? validationRes.card_no.trim() : null) ||
+            validationRes.cus_phone ||
+            payment.customerPhone ||
+            null;
+        const bankTranId = validationRes.bank_tran_id || null;
+
         const updatedPayment = await tx.payment.update({
             where: { id: payment.id },
             data: {
                 status: 'SUCCEEDED',
                 verifiedAt: new Date(),
                 providerReference: valId,
+                valId,
+                customerPhone: customerPhone ? String(customerPhone).trim() : null,
+                bankTranId: bankTranId ? String(bankTranId).trim() : null,
             },
         });
 
