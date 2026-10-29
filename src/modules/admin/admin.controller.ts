@@ -34,6 +34,11 @@ const getOverviewAnalytics = asyncHandler(async (req: Request, res: Response) =>
   sendResponse(res, 200, "Admin overview analytics retrieved successfully", true, null, result);
 });
 
+const getVisitorAnalytics = asyncHandler(async (_req: Request, res: Response) => {
+  const result = await adminService.getVisitorAnalytics();
+  sendResponse(res, 200, "Visitor analytics retrieved successfully", true, null, result);
+});
+
 const getPosters = asyncHandler(async (req: Request, res: Response) => {
   const result = await adminService.getPosters(req.query);
   sendResponse(res, 200, "Admin posters retrieved successfully", true, null, result);
@@ -50,6 +55,7 @@ export const adminController = {
   updateUserRole,
   updateUserStatus,
   getOverviewAnalytics,
+  getVisitorAnalytics,
   getPosters,
   getTransactions,
 };

@@ -341,6 +341,7 @@ All application endpoints are served under the `/api/v1` base route.
 | Method | Path | Purpose | Access Level |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/admin/analytics/overview` | Platform-wide counts (users, posters, tasks) | `admin:users:manage` |
+| `GET` | `/api/v1/admin/analytics/visitors` | Aggregated visitor counts (24h, 7d, 30d, lifetime) | `admin:users:manage` |
 | `GET` | `/api/v1/admin/posters` | View all platform posters | `admin:users:manage` |
 | `GET` | `/api/v1/admin/transactions` | System-wide transaction ledger entries | `admin:users:manage` |
 | `GET` | `/api/v1/admin/users` | List all registered user accounts | `admin:users:manage` |
@@ -360,6 +361,7 @@ All application endpoints are served under the `/api/v1` base route.
 | Method | Path | Purpose | Access Level |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/public/stats` | Aggregated user, template, and poster counts | Public |
+| `POST` | `/api/v1/public/track-visit` | Privacy-friendly visitor tracking with 1h deduplication | Public |
 | `POST` | `/api/v1/contact` | Submit contact/support message | Public |
 
 ---

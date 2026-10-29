@@ -2,10 +2,16 @@ import { Router } from "express";
 import { aiController } from "./ai.controller.js";
 import { requireUserOrGuest } from "../../middlewares/guest.middleware.js";
 import { optionalAuth } from "../../middlewares/auth.middleware.js";
+import { rateLimit } from "../../middlewares/rateLimit.middleware.js";
 
 const router = Router();
 
-
+// Rate limit to prevent LLM quota exhaustion and API spamming
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 requests per IP
+  message: "AI generation quota exceeded for this IP. Please wait 15 minutes.",
+});
 
 /**
  * Routes:
@@ -17,9 +23,9 @@ const router = Router();
 router.use(optionalAuth);
 router.use(requireUserOrGuest);
 
-router.post("/generate-slogans", aiController.generateSlogans);
-router.post("/tasks", aiController.createTask);
-router.post("/remove-background", aiController.removeBackground);
+router.post("/generate-slogans", aiLimiter, aiController.generateSlogans);
+router.post("/tasks", aiLimiter, aiController.createTask);
+router.post("/remove-background", aiLimiter, aiController.removeBackground);
 router.get("/tasks/:id", aiController.getTaskStatus);
 
 export const aiRoutes = router;

@@ -447,6 +447,9 @@ const getTransactions = async (query: any) => {
     return {
       id: p.id,
       trxId: p.tranId,
+      gatewayTrxId: p.bankTranId || p.providerReference || p.tranId,
+      customerPhone: p.customerPhone || null,
+      valId: p.valId || null,
       method,
       amount: Number(p.amount || 0),
       status,
@@ -467,12 +470,34 @@ const getTransactions = async (query: any) => {
   };
 };
 
+const getVisitorAnalytics = async () => {
+  const now = new Date();
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const [last24Hours, last7Days, last30Days, lifetime] = await Promise.all([
+    prisma.visitorLog.count({ where: { createdAt: { gte: oneDayAgo } } }),
+    prisma.visitorLog.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+    prisma.visitorLog.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.visitorLog.count(),
+  ]);
+
+  return {
+    last24Hours,
+    last7Days,
+    last30Days,
+    lifetime,
+  };
+};
+
 export const adminService = {
   getUsers,
   getUserById,
   updateUserRole,
   updateUserStatus,
   getOverviewAnalytics,
+  getVisitorAnalytics,
   getPosters,
   getTransactions,
 };
