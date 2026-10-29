@@ -9,6 +9,7 @@ const router = Router();
 router.use(verifyToken, requirePermission("admin:users:manage"));
 
 router.get("/analytics/overview", adminController.getOverviewAnalytics);
+router.get("/analytics/visitors", adminController.getVisitorAnalytics);
 router.get("/posters", adminController.getPosters);
 router.get("/transactions", adminController.getTransactions);
 router.get("/roles", adminController.getAllRoles);

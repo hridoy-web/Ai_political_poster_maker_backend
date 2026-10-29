@@ -324,27 +324,38 @@ const getOverviewAnalytics = async () => {
     }
   }
 
-  // Last 7 days dynamic daily revenue calculation (formatted in Bengali month/day)
+  // Last 7 consecutive days daily revenue for charts (Bengali formatting)
+  const daysCount = 7;
+  const dailyBuckets = new Map<string, { day: string; revenue: number }>();
   const monthNames = [
     "জানু", "ফেব্রু", "মার্চ", "এপ্রিল", "মে", "জুন",
     "জুলাই", "আগস্ট", "সেপ্টে", "অক্টো", "নভে", "ডিসে"
   ];
 
-  const dailyRevenue: Array<{ day: string; revenue: number }> = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-    const nextD = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1);
+  for (let i = daysCount - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateKey = d.toISOString().split("T")[0]; // "YYYY-MM-DD"
 
-    const dayLabel = `${d.getDate()} ${monthNames[d.getMonth()]}`;
-    const dayRevenue = successfulPayments
-      .filter((p) => p.createdAt >= d && p.createdAt < nextD)
-      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    let label: string;
+    try {
+      label = d.toLocaleDateString("bn-BD", { day: "numeric", month: "short" });
+    } catch {
+      label = `${d.getDate()} ${monthNames[d.getMonth()]}`;
+    }
 
-    dailyRevenue.push({
-      day: dayLabel,
-      revenue: dayRevenue,
-    });
+    dailyBuckets.set(dateKey, { day: label, revenue: 0 });
   }
+
+  for (const p of successfulPayments) {
+    const paymentDateKey = p.createdAt.toISOString().split("T")[0];
+    const bucket = dailyBuckets.get(paymentDateKey);
+    if (bucket) {
+      bucket.revenue += Number(p.amount || 0);
+    }
+  }
+
+  const dailyRevenue = Array.from(dailyBuckets.values());
 
   return {
     todayRevenue,
@@ -513,6 +524,9 @@ const getTransactions = async (query: any) => {
     return {
       id: p.id,
       trxId: p.tranId,
+      gatewayTrxId: p.bankTranId || p.providerReference || p.tranId,
+      customerPhone: p.customerPhone || null,
+      valId: p.valId || null,
       method,
       amount: Number(p.amount || 0),
       status,
@@ -533,6 +547,27 @@ const getTransactions = async (query: any) => {
   };
 };
 
+const getVisitorAnalytics = async () => {
+  const now = new Date();
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const [last24Hours, last7Days, last30Days, lifetime] = await Promise.all([
+    prisma.visitorLog.count({ where: { createdAt: { gte: oneDayAgo } } }),
+    prisma.visitorLog.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+    prisma.visitorLog.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.visitorLog.count(),
+  ]);
+
+  return {
+    last24Hours,
+    last7Days,
+    last30Days,
+    lifetime,
+  };
+};
+
 export const adminService = {
   getUsers,
   getUserById,
@@ -540,6 +575,7 @@ export const adminService = {
   updateUserRole,
   updateUserStatus,
   getOverviewAnalytics,
+  getVisitorAnalytics,
   getPosters,
   deletePoster,
   getTransactions,

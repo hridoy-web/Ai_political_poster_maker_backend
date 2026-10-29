@@ -5,12 +5,56 @@ import crypto from "node:crypto";
 import { BillingService } from "../modules/payment/billing.service.js";
 
 /**
+ * Headless Canvas / Browser Rendering Hook.
+ *
+ * ARCHITECTURAL CONTRACT:
+ * In a complete production deployment, this hook interfaces with an isolated headless
+ * rendering engine (e.g., Puppeteer, Playwright, node-canvas, or a dedicated render microservice) that:
+ *  1. Compiles the template HTML/CSS with user text and political branding values substituted.
+ *  2. Composites high-resolution source images into the designated layout layer positions.
+ *  3. Captures a pixel-perfect PNG buffer and a lightweight WebP preview thumbnail.
+ *  4. Streams the rendered images to Cloudinary via storageService.uploadBuffer().
+ *
+ * CURRENT STAGE (LIFECYCLE & STATE ORCHESTRATION):
+ * This worker currently handles the complete transactional lifecycle state machine:
+ *  - State transition: PENDING -> PROCESSING -> COMPLETED (or FAILED on error).
+ *  - Atomic creation of output and preview Asset records linked to the user or guest session.
+ *  - Double-entry ledger settlement (decrementing reserves or incrementing guest limits).
+ *  - Automatic billing credit refund via BillingService upon unrecoverable pipeline failure.
+ *
+ * The block below generates simulated output asset records until the external headless renderer is connected.
+ */
+async function executeHeadlessRendererHook(payload: {
+  posterId: string;
+  templateWidth: number;
+  templateHeight: number;
+  idempotencyKey?: string;
+}): Promise<{
+  outputStorageKey: string;
+  previewStorageKey: string;
+  width: number;
+  height: number;
+}> {
+  // TODO [Production Plug-in]: Replace simulated keys with output from actual headless render service
+  const renderTimestamp = Date.now();
+  const outputStorageKey = `posters/${payload.posterId}/render_${payload.idempotencyKey || renderTimestamp}`;
+  const previewStorageKey = `posters/${payload.posterId}/preview_${payload.idempotencyKey || renderTimestamp}`;
+
+  return {
+    outputStorageKey,
+    previewStorageKey,
+    width: payload.templateWidth,
+    height: payload.templateHeight,
+  };
+}
+
+/**
  * Worker handler for processing poster background rendering jobs asynchronously.
  */
 export async function processPosterRenderJob(
   payload: IPosterRenderJobPayload
 ): Promise<boolean> {
-  console.log(`[PosterWorker] Processing render job for poster ID: ${payload.posterId}...`);
+  console.log(`[PosterWorker] Lifecycle Transition: Poster ${payload.posterId} -> PROCESSING...`);
 
   const poster = await prisma.poster.findUnique({
     where: { id: payload.posterId },
@@ -24,36 +68,38 @@ export async function processPosterRenderJob(
   });
 
   if (!poster) {
-    console.warn(`[PosterWorker] Poster ${payload.posterId} not found. Skipping.`);
+    console.warn(`[PosterWorker] Poster ${payload.posterId} not found in database. Skipping.`);
     return false;
   }
 
-  // Idempotency: if already completed, nothing to do
+  // Idempotency check: if already completed, nothing to do
   if (poster.status === "COMPLETED") {
-    console.log(`[PosterWorker] Poster ${payload.posterId} is already COMPLETED. Skipping.`);
+    console.log(`[PosterWorker] Poster ${payload.posterId} is already COMPLETED. Skipping duplicate execution.`);
     return true;
   }
 
   try {
-    // 1. Simulate/execute the high-resolution rendering pipeline
-    // In production with Saad's canvas/headless renderer, this creates the final composed image.
-    const renderTimestamp = Date.now();
-    const outputStorageKey = `posters/${payload.posterId}/render_${payload.idempotencyKey || renderTimestamp}`;
-    const previewStorageKey = `posters/${payload.posterId}/preview_${payload.idempotencyKey || renderTimestamp}`;
+    const templateWidth = poster.template?.width || 1080;
+    const templateHeight = poster.template?.height || 1920;
 
-    const width = poster.template?.width || 1080;
-    const height = poster.template?.height || 1920;
+    // 1. Invoke Headless Rendering Pipeline (or stub hook)
+    const rendered = await executeHeadlessRendererHook({
+      posterId: payload.posterId,
+      templateWidth,
+      templateHeight,
+      idempotencyKey: payload.idempotencyKey,
+    });
 
     // 2. Persist output and preview assets atomically, mark COMPLETED and settle billing
     await prisma.$transaction(async (tx) => {
-      // Create output asset
+      // Create final output asset
       const outputAsset = await tx.asset.create({
         data: {
-          storageKey: outputStorageKey,
+          storageKey: rendered.outputStorageKey,
           mimeType: "image/png",
           sizeBytes: 245000,
-          width,
-          height,
+          width: rendered.width,
+          height: rendered.height,
           purpose: "POSTER_OUTPUT",
           ownerUserId: payload.userId ?? null,
           guestSessionId: payload.guestSessionId ?? null,
@@ -63,18 +109,18 @@ export async function processPosterRenderJob(
       // Create preview thumbnail asset
       const previewAsset = await tx.asset.create({
         data: {
-          storageKey: previewStorageKey,
+          storageKey: rendered.previewStorageKey,
           mimeType: "image/webp",
           sizeBytes: 45000,
-          width: Math.round(width / 4),
-          height: Math.round(height / 4),
+          width: Math.round(rendered.width / 4),
+          height: Math.round(rendered.height / 4),
           purpose: "POSTER_OUTPUT",
           ownerUserId: payload.userId ?? null,
           guestSessionId: payload.guestSessionId ?? null,
         },
       });
 
-      // Update poster status to COMPLETED
+      // Transition poster status to COMPLETED
       await tx.poster.update({
         where: { id: payload.posterId },
         data: {
@@ -96,13 +142,18 @@ export async function processPosterRenderJob(
           },
         });
       }
-      // For registered users: Credit reservation was already recorded as POSTER_DEBIT in triggerRender
+      // For registered users: Credit reservation was already debited as POSTER_DEBIT in triggerRender
     });
 
-    console.log(`[PosterWorker] Poster ${payload.posterId} rendered and marked COMPLETED successfully.`);
+    console.log(
+      `[PosterWorker] Lifecycle Transition: Poster ${payload.posterId} [PROCESSING -> COMPLETED] with output assets saved.`
+    );
     return true;
   } catch (error: any) {
-    console.error(`[PosterWorker] Render failed for poster ${payload.posterId}:`, error?.message || error);
+    console.error(
+      `[PosterWorker] Lifecycle Transition: Poster ${payload.posterId} [PROCESSING -> FAILED]. Cause:`,
+      error?.message || error
+    );
 
     // 3. Mark FAILED and execute billing refund
     try {
@@ -116,17 +167,22 @@ export async function processPosterRenderJob(
         },
       });
 
-      // Billing Refund: If authenticated user had credits reserved, refund them via BillingService
+      // Billing Refund: If authenticated user had credits debited, refund them via BillingService
       if (payload.userId) {
         await BillingService.refundCredits(
           payload.userId,
           1,
           `refund_${payload.idempotencyKey || crypto.randomUUID()}`
         );
-        console.log(`[PosterWorker] Refunded 1 credit via BillingService to user ${payload.userId} due to render failure.`);
+        console.log(
+          `[PosterWorker] Settle Refund: Credited back 1 credit via BillingService to user ${payload.userId} for failed poster ${payload.posterId}.`
+        );
       }
     } catch (refundError) {
-      console.error(`[PosterWorker] Failed to process billing refund for poster ${payload.posterId}:`, refundError);
+      console.error(
+        `[PosterWorker] Critical: Failed to process billing refund for poster ${payload.posterId}:`,
+        refundError
+      );
     }
 
     return false;
@@ -137,7 +193,6 @@ export async function processPosterRenderJob(
  * Dispatches an asynchronous render job to the background worker.
  */
 export function dispatchPosterRenderJob(payload: IPosterRenderJobPayload): void {
-  // Use setImmediate to asynchronously execute without blocking the HTTP response
   setImmediate(async () => {
     try {
       await processPosterRenderJob(payload);
@@ -173,7 +228,7 @@ export function startPosterWorkerQueue(pollIntervalMs: number = 15000): NodeJS.T
 
       if (!stuckPoster || !stuckPoster.templateId) return;
 
-      console.log(`[PosterWorker] Found stuck processing poster ${stuckPoster.id}. Recovering and rendering...`);
+      console.log(`[PosterWorker] Found stuck processing poster ${stuckPoster.id}. Recovering and executing...`);
       await processPosterRenderJob({
         posterId: stuckPoster.id,
         userId: stuckPoster.userId ?? undefined,

@@ -11,7 +11,7 @@ interface TokenPayload extends JwtPayload {
 /**
  * Self-contained auth middleware for Billing, Payment, Wallet and Subscription.
  * Supports token extraction from both cookies (web app) and Authorization: Bearer header (Postman/API).
- * Keeps Shakil's auth.middleware.ts 100% untouched.
+ * Explicitly restricts verification to the HS256 algorithm to prevent algorithm confusion attacks.
  */
 export const requireBillingAuth = async (
   req: Request,
@@ -35,7 +35,7 @@ export const requireBillingAuth = async (
       throw new ApiError(500, "Server configuration error: JWT_SECRET missing.");
     }
 
-    const decoded = jwt.verify(token, secret) as TokenPayload;
+    const decoded = jwt.verify(token, secret, { algorithms: ["HS256"] }) as TokenPayload;
     if (!decoded?.id) {
       throw new ApiError(401, "Invalid token payload.");
     }

@@ -58,3 +58,8 @@ coverage/
 .envrc
 .venv/
 venv/
+
+
+# Documentation & Internal Logs
+docs/
+*.log.md

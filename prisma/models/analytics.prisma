@@ -1,0 +1,13 @@
+// Visitor tracking and analytics logs
+model VisitorLog {
+  id        String   @id @default(uuid())
+  ipHash    String
+  userAgent String?
+  path      String   @default("/")
+  referrer  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([ipHash, createdAt])
+}
+
