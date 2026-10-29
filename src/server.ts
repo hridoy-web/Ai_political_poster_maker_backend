@@ -40,6 +40,14 @@ async function startServer(): Promise<void> {
 
     process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
     process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+    process.on("unhandledRejection", (reason: unknown) => {
+      console.error("[Server] Critical: Unhandled Promise Rejection:", reason);
+    });
+
+    process.on("uncaughtException", (error: Error) => {
+      console.error("[Server] Critical: Uncaught Exception:", error);
+    });
    
   } catch (error) {
     console.error("Server startup failed:", error);
