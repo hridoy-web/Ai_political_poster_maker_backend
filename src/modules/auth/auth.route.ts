@@ -3,6 +3,7 @@ import { login, logout, register } from "./auth.controller.js";
 import { upload } from "../../middlewares/multer.middleware.js";
 import { verifyToken } from "../../middlewares/auth.middleware.js";
 import { rateLimit } from "../../middlewares/rateLimit.middleware.js";
+import { googleLogin } from "./googleLogin.controller.js";
 
 const authRoutes = Router();
 
@@ -15,6 +16,7 @@ const authLimiter = rateLimit({
 
 authRoutes.post("/register", authLimiter, upload.single("image"), register);
 authRoutes.post("/login", authLimiter, login);
+authRoutes.post("/google", authLimiter, googleLogin);
 authRoutes.post("/logout", verifyToken, logout);
 
 export default authRoutes;
