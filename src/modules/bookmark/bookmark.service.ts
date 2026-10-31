@@ -1,23 +1,24 @@
 import { prisma } from "../../lib/prisma.js";
 import { ApiError } from "../../utils/ApiError.js";
 
-
 const addBookmark = async (userId: string, templateId: string) => {
-  
   const template = await prisma.template.findUnique({
     where: { id: templateId },
+    include: {
+      category: {
+        select: { isActive: true },
+      },
+    },
   });
 
   if (!template) {
     throw new ApiError(404, "Template not found");
   }
 
- 
-  if (template.status !== "PUBLISHED") {
-    throw new ApiError(400, "Only published templates can be bookmarked");
+  if (template.status !== "PUBLISHED" || !template.category?.isActive) {
+    throw new ApiError(400, "Only published templates from active categories can be bookmarked");
   }
 
-  
   const existingBookmark = await prisma.bookmark.findUnique({
     where: {
       userId_templateId: {
@@ -70,13 +71,16 @@ const removeBookmark = async (userId: string, templateId: string) => {
   }
 };
 
-// ৩. Get the list of templates bookmarked by the logged-in user.
+// ৩. Get the list of templates bookmarked by the logged-in user (Active Category Isolated)
 const getUserBookmarks = async (userId: string) => {
   const bookmarks = await prisma.bookmark.findMany({
     where: { 
       userId,
       template: {
         status: "PUBLISHED", 
+        category: {
+          isActive: true,
+        },
       },
     },
     orderBy: { createdAt: "desc" },

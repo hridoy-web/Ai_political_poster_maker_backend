@@ -1,20 +1,53 @@
 import { Router } from "express";
-import uploadRoutes from "../modules/upload/upload.route.js";
-import authRoutes from "../modules/auth/auth.route.js";
-import userRoutes from "../modules/user/user.route.js";
-import { CategoryRoutes } from "../modules/category/category.routes.js";
-import { TemplateRoutes } from "../modules/template/template.routes.js";
-import aiRoutes from "../modules/ai/route.js";
-import bookmarkRoutes from "../modules/bookmark/bookmark.route.js";
+import uploadRouter from "../modules/upload/upload.route.js";
+import authRouter from "../modules/auth/auth.route.js";
+import userRouter from "../modules/user/user.route.js";
+import { CategoryRoutes as categoryRouter } from "../modules/category/category.routes.js";
+import { TemplateRoutes as templateRouter } from "../modules/template/template.routes.js";
+import aiRouter from "../modules/ai/route.js";
+import bookmarkRouter from "../modules/bookmark/bookmark.route.js";
+import posterRoutes from "../modules/poster/route.js";
+import guestRouter from "../modules/guest/guest.route.js";
+import { packageRoutes } from "../modules/package/package.routes.js";
+import { paymentRoutes } from "../modules/payment/payment.routes.js";
+import { walletRoutes } from "../modules/wallet/wallet.routes.js";
+import { transactionRoutes } from "../modules/transaction/transaction.routes.js";
+import { subscriptionRoutes } from "../modules/subscription/subscription.routes.js";
+import adminRouter from "../modules/admin/route.js";
+import rbacRouter from "../modules/rbac/route.js";
+import contactRouter from "../modules/contact/contact.route.js";
+import publicRouter from "../modules/public/public.route.js";
 
 const router = Router();
 
-router.use("/uploads", uploadRoutes);
-router.use("/auth", authRoutes);
-router.use("/user", userRoutes);
-router.use("/category", CategoryRoutes);
-router.use("/template", TemplateRoutes);
-router.use("/bookmarks", bookmarkRoutes);
-router.use("/ai", aiRoutes);
+router.use("/upload", uploadRouter);
+router.use("/auth", authRouter);
+router.use("/user", userRouter);
+router.use("/category", categoryRouter);
+router.use("/template", templateRouter);
+router.use("/bookmarks", bookmarkRouter);
+router.use("/ai", aiRouter);
+router.use("/posters", posterRoutes);
+router.use("/guest", guestRouter);
+
+// Public & Contact Routes
+router.use("/contact", contactRouter);
+router.use("/public", publicRouter);
+
+// Dev 2: Admin & RBAC Routes
+router.use("/admin", adminRouter);
+router.use("/rbac", rbacRouter);
+
+// Dev 7: Billing, Packages, Payments, Wallets, Transactions, and Subscriptions
+router.use("/package", packageRoutes);
+router.use("/packages", packageRoutes);
+router.use("/payment", paymentRoutes);
+router.use("/payments", paymentRoutes);
+router.use("/wallet", walletRoutes);
+router.use("/wallets", walletRoutes);
+router.use("/transaction", transactionRoutes);
+router.use("/transactions", transactionRoutes);
+router.use("/subscription", subscriptionRoutes);
+router.use("/subscriptions", subscriptionRoutes);
 
 export default router;

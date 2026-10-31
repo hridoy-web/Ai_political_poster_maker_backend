@@ -152,3 +152,103 @@ export function parseSlogansJson(rawText: string): ISloganItem[] {
     return [];
   }
 }
+
+/**
+ * High-quality authentic Bangladeshi political slogan generator fallback.
+ * Used when LLM network fails or API keys are unconfigured, ensuring 100% service uptime.
+ */
+export function generateAuthenticFallbackSlogans(input: IGenerateSlogansInput): ISloganItem[] {
+  const candidate = (input.candidateName || "জননেতা").trim();
+  const area = (input.area || "এলাকা").trim();
+  const party = (input.partyOrIdeology || "").toLowerCase().trim();
+  const topic = (input.topic || "নির্বাচনী প্রচারণা").trim();
+  const count = input.count ?? 4;
+
+  const results: ISloganItem[] = [];
+
+  // 1. Party-specific historic couplet
+  if (party.includes("বিএনপি") || party.includes("bnp") || party.includes("ধানের শীষ")) {
+    results.push({
+      slogan: "ভোট দিলে ধানের শীষে, / দেশ গড়বো মিলেমিশে।",
+      subText: `${area} এলাকার সার্বিক উন্নয়ন ও গণতন্ত্র প্রতিষ্ঠায় আপনার সমর্থন চাই।`,
+    });
+    results.push({
+      slogan: `এলাকার সন্তান ${candidate} ভাই, / ধানের শীষে ভোট চাই।`,
+      subText: `আসন্ন নির্বাচনে ${candidate} ভাইকে ধানের শীষ মার্কায় বিজয়ী করুন।`,
+    });
+    results.push({
+      slogan: "তারুণ্যের প্রথম ভোট, / ধানের শীষের পক্ষে হোক।",
+      subText: "দেশনেত্রী ও তরুণ প্রজন্মের স্বপ্নপূরণে ঐক্যবদ্ধ হোন।",
+    });
+  } else if (party.includes("জামায়াত") || party.includes("jamaat") || party.includes("দাঁড়িপাল্লা")) {
+    results.push({
+      slogan: "ইনসাফ যদি পেতে চাও, / দাঁড়িপাল্লায় ভোট দাও।",
+      subText: "দুর্নীতিমুক্ত সমাজ ও ন্যায়বিচার প্রতিষ্ঠায় দাঁড়িপাল্লা মার্কায় ভোট দিন।",
+    });
+    results.push({
+      slogan: `এলাকার বুকে ইনসাফের আলো, / ${candidate} ভাই মানুষ ভালো।`,
+      subText: `সৎ ও যোগ্য নেতৃত্ব গঠনে ${candidate} ভাইকে জয়যুক্ত করুন।`,
+    });
+    results.push({
+      slogan: "সৎ মানুষের শাসন চাই, / ইনসাফের সমাজ পাই।",
+      subText: `${area}বাসীর নাগরিক অধিকার আদায়ে ঐক্যবদ্ধ সংগ্রাম।`,
+    });
+  } else if (party.includes("নাগরিক") || party.includes("ncp") || party.includes("ছাত্র") || party.includes("বৈষম্য")) {
+    results.push({
+      slogan: "রক্তে কেনা নতুন ভোরে, / বৈষম্যহীন দেশ গড়ে।",
+      subText: "২৪-এর বিপ্লবের আকাঙ্ক্ষা বাস্তবায়নে নতুন বাংলাদেশ বিনির্মাণে এগিয়ে আসুন।",
+    });
+    results.push({
+      slogan: `তারুণ্যের শক্তিতে ${candidate} ভাই, / সংস্কারের নতুন দেশ বানাই।`,
+      subText: `${area} আসনে মেধা ও তারুণ্যের প্রতীক ${candidate} ভাইয়ের পক্ষে ভোট দিন।`,
+    });
+    results.push({
+      slogan: "আমার সোনার বাংলায়, / বৈষম্যের ঠাঁই নাই।",
+      subText: "নাগরিক অধিকার ও সুশাসন প্রতিষ্ঠায় তারুণ্যের অঙ্গীকার।",
+    });
+  } else if (party.includes("জাপা") || party.includes("জাতীয় পার্টি") || party.includes("লাঙ্গল")) {
+    results.push({
+      slogan: "লাঙ্গল মার্কায় দিলে ভোট, / শান্তি পাবে দেশের লোক।",
+      subText: "পল্লীবন্ধুর স্বপ্ন পূরণ ও গ্রামীণ উন্নয়নে লাঙ্গল প্রতীকে ভোট দিন।",
+    });
+    results.push({
+      slogan: `এলাকার সার্বিক উন্নয়নে ${candidate} ভাই, / লাঙ্গল প্রতীকে ভোট চাই।`,
+      subText: `${area}বাসীর অকৃত্রিম বন্ধু ${candidate} ভাইকে নির্বাচিত করুন।`,
+    });
+  } else {
+    // Independent / Universal Good Governance
+    results.push({
+      slogan: "দলমত নির্বিশেষে, / সৎ প্রার্থীর পক্ষে আসুন মিলেমিশে।",
+      subText: `${area} এলাকার সার্বিক উন্নয়ন ও পরিবর্তনের প্রত্যয়ে ভোট দিন।`,
+    });
+    results.push({
+      slogan: `সততা আর নিষ্ঠার প্রতীক, / ${candidate} ভাই প্রার্থী সঠিক।`,
+      subText: `সৎ ও জনবান্ধব জনপ্রতিনিধি হিসেবে ${candidate} ভাইকে বিজয়ী করুন।`,
+    });
+    results.push({
+      slogan: "মার্কা যার যার, / সৎ প্রার্থী সবার।",
+      subText: "যোগ্য ও কর্মঠ নেতৃত্বকে নির্বাচিত করে উন্নয়নের ধারা বেগবান করুন।",
+    });
+  }
+
+  // Topic-specific couplet
+  if (topic.includes("তারুণ্য") || topic.includes("কর্মসংস্থান") || topic.includes("তরুণ")) {
+    results.push({
+      slogan: "তারুণ্যের শক্তি আর মেধার বলে, / আধুনিক সমাজ গড়বো সকলে।",
+      subText: "যুবসমাজের কর্মসংস্থান ও মেধাভিত্তিক নতুন প্রজন্ম বিনির্মাণে পাশে থাকুন।",
+    });
+  } else if (topic.includes("উন্নয়ন") || topic.includes("অবকাঠামো")) {
+    results.push({
+      slogan: "কথায় নয় কাজে বিশ্বাসী, / উন্নয়ন করবো দিবানিশি।",
+      subText: `${area} এলাকার রাস্তাঘাট ও নাগরিক সুযোগ-সুবিধা নিশ্চিতের অঙ্গীকার।`,
+    });
+  } else {
+    results.push({
+      slogan: `জনগণের পাশে ${candidate} ভাই, / এলাকার শান্তি ও সমৃদ্ধি চাই।`,
+      subText: `${area}বাসীর ভালোবাসা ও দোয়ায় আমাদের পথচলা।`,
+    });
+  }
+
+  return results.slice(0, count);
+}
+

@@ -23,11 +23,10 @@ const validateData = <T>(schema: ZodSchema<T>, data: unknown): T => {
 };
 
 const extractAuthContext = (req: Request) => {
-  const userId = (req as any).user?.id as string | undefined;
-  const role = (req as any).user?.role as string | undefined;
-  const guestSessionId =
-    (req.headers["x-guest-session-id"] as string) || req.cookies?.guest_session_id;
-  return { userId, guestSessionId, role };
+  const userId = req.user?.id;
+  const guestSessionId = req.guestSessionId;
+
+  return { userId, guestSessionId };
 };
 
 const generateSlogans = asyncHandler(async (req: Request, res: Response) => {

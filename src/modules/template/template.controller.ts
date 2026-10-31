@@ -14,22 +14,15 @@ const formatIssues = (issues: ZodIssue[]) =>
   issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
 
 const createTemplate = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id; 
   const parsed = createTemplateSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ApiError(400, formatIssues(parsed.error.issues));
   }
 
-  const userId = (req as any).user?.id;
-  const data = await templateService.createTemplate(parsed.data as any, userId);
+  const result = await templateService.createTemplate(parsed.data, userId);
 
-  sendResponse(
-    res, 
-    201,
-     "Template created successfully",
-      true,
-      null,
-      data
-      );
+  sendResponse(res, 201, "Template created successfully", true, null, result);
 });
 
 const listTemplates = asyncHandler(async (req: Request, res: Response) => {
@@ -103,6 +96,11 @@ const unarchiveTemplate = asyncHandler(async (req: Request, res: Response) => {
   sendResponse(res, 200, "Template unarchived successfully", true, null, data);
 });
 
+const deleteTemplate = asyncHandler(async (req: Request, res: Response) => {
+  const data = await templateService.deleteTemplate(req.params.id as string);
+  sendResponse(res, 200, "Template deleted successfully", true, null, data);
+});
+
 export const templateController = {
   createTemplate,
   listTemplates,
@@ -111,4 +109,5 @@ export const templateController = {
   publishTemplate,
   archiveTemplate,
   unarchiveTemplate,
+  deleteTemplate,
 };
