@@ -404,55 +404,59 @@ class PosterService {
       throw new ApiError(400, "Cannot render a poster without an assigned template");
     }
 
-    await validateTemplate(poster.templateId);
+    const template = await validateTemplate(poster.templateId);
 
-    // 1. Billing Reservation
-    if (owner.userId) {
-      // Authenticated User: Verify and reserve credit (or grant starter credit)
-      const wallet = await prisma.creditWallet.findUnique({
-        where: { userId: owner.userId },
-      });
+    // 1. Billing Reservation: Credit is only deducted for PREMIUM (Pro) templates!
+    const isPremiumTemplate = template?.accessLevel === "PREMIUM";
 
-      const currentBalance = wallet ? wallet.balance : 5; // Default 5 starter credits if uninitialized
-
-      if (currentBalance < 1) {
-        throw new ApiError(402, "Insufficient poster credits. Please recharge your credit wallet.");
-      }
-
-      await prisma.$transaction(async (tx) => {
-        const updatedWallet = await tx.creditWallet.upsert({
-          where: { userId: owner.userId! },
-          create: {
-            userId: owner.userId!,
-            balance: 4,
-          },
-          update: {
-            balance: { decrement: 1 },
-          },
+    if (isPremiumTemplate) {
+      if (owner.userId) {
+        // Authenticated User: Verify and reserve credit (or grant starter credit)
+        const wallet = await prisma.creditWallet.findUnique({
+          where: { userId: owner.userId },
         });
 
-        await tx.creditLedgerEntry.create({
-          data: {
-            userId: owner.userId!,
-            type: "POSTER_DEBIT",
-            amount: -1,
-            balanceAfter: updatedWallet.balance,
-            idempotencyKey: `reserve_${renderIdempotencyKey}`,
-          },
-        });
-      });
-    } else if (owner.guestSessionId) {
-      // Guest User: Check free quota (max 3 successful posters)
-      const guestSession = await prisma.guestSession.findUnique({
-        where: { id: owner.guestSessionId },
-        select: { successfulPosters: true },
-      });
+        const currentBalance = wallet ? wallet.balance : 5; // Default 5 starter credits if uninitialized
 
-      if (guestSession && guestSession.successfulPosters >= 3) {
-        throw new ApiError(
-          403,
-          "Guest free poster limit reached (maximum 3 posters). Please register an account to continue."
-        );
+        if (currentBalance < 1) {
+          throw new ApiError(402, "Insufficient poster credits. Please recharge your credit wallet.");
+        }
+
+        await prisma.$transaction(async (tx) => {
+          const updatedWallet = await tx.creditWallet.upsert({
+            where: { userId: owner.userId! },
+            create: {
+              userId: owner.userId!,
+              balance: 4,
+            },
+            update: {
+              balance: { decrement: 1 },
+            },
+          });
+
+          await tx.creditLedgerEntry.create({
+            data: {
+              userId: owner.userId!,
+              type: "POSTER_DEBIT",
+              amount: -1,
+              balanceAfter: updatedWallet.balance,
+              idempotencyKey: `reserve_${renderIdempotencyKey}`,
+            },
+          });
+        });
+      } else if (owner.guestSessionId) {
+        // Guest User: Check free quota (max 3 successful posters)
+        const guestSession = await prisma.guestSession.findUnique({
+          where: { id: owner.guestSessionId },
+          select: { successfulPosters: true },
+        });
+
+        if (guestSession && guestSession.successfulPosters >= 3) {
+          throw new ApiError(
+            403,
+            "Guest free poster limit reached (maximum 3 posters). Please register an account to continue."
+          );
+        }
       }
     }
 

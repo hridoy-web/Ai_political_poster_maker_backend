@@ -133,8 +133,8 @@ export async function processPosterRenderJob(
         },
       });
 
-      // Settle Billing: If guest user, increment their successful posters counter
-      if (payload.guestSessionId) {
+      // Settle Billing: If guest user and pro template, increment their successful posters counter
+      if (payload.guestSessionId && poster.template?.accessLevel === "PREMIUM") {
         await tx.guestSession.update({
           where: { id: payload.guestSessionId },
           data: {
@@ -142,7 +142,7 @@ export async function processPosterRenderJob(
           },
         });
       }
-      // For registered users: Credit reservation was already debited as POSTER_DEBIT in triggerRender
+      // For registered users: Credit reservation was already debited as POSTER_DEBIT in triggerRender if Pro template
     });
 
     console.log(
@@ -167,8 +167,8 @@ export async function processPosterRenderJob(
         },
       });
 
-      // Billing Refund: If authenticated user had credits debited, refund them via BillingService
-      if (payload.userId) {
+      // Billing Refund: If authenticated user had credits debited for Pro template, refund them via BillingService
+      if (payload.userId && poster?.template?.accessLevel === "PREMIUM") {
         await BillingService.refundCredits(
           payload.userId,
           1,
