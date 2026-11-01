@@ -63,3 +63,5 @@ venv/
 # Documentation & Internal Logs
 docs/
 *.log.md
+# Antigravity ignore file
+.antigravityignore
