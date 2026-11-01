@@ -17,9 +17,12 @@ export const optionalAuth = async (
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
+    const bearerToken = authHeader?.match(/^Bearer\s+(.*)$/i)?.[1]?.trim() || null;
     const token =
       req.cookies?.token ||
-      (authHeader?.startsWith("Bearer ") ? authHeader.split(" ")[1] : null);
+      req.cookies?.accessToken ||
+      req.cookies?.jwt ||
+      bearerToken;
 
     if (!token) {
       next();
@@ -95,10 +98,12 @@ export const optionalAuth = async (
 export const verifyToken = asyncHandler(
   async (req: Request, _res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
-    const bearerToken = authHeader?.startsWith("Bearer ")
-      ? authHeader.split(" ")[1]
-      : null;
-    const token: unknown = req.cookies?.token || bearerToken;
+    const bearerToken = authHeader?.match(/^Bearer\s+(.*)$/i)?.[1]?.trim() || null;
+    const token: unknown =
+      req.cookies?.token ||
+      req.cookies?.accessToken ||
+      req.cookies?.jwt ||
+      bearerToken;
 
     if (typeof token !== "string" || token.length === 0) {
       throw new ApiError(401, "Please log in to continue");
