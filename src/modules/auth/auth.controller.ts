@@ -140,4 +140,3 @@ export const logout = asyncHandler(async (_req: Request, res: Response) => {
     null,
   );
 });
-
