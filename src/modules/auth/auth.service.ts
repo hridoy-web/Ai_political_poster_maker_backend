@@ -22,7 +22,11 @@ const isLocal =
   frontendUrl.includes("localhost") ||
   frontendUrl.includes("127.0.0.1");
 
-export const isProduction = !isLocal;
+export const isProduction =
+  nodeEnv === "production" ||
+  Boolean(process.env.RENDER) ||
+  Boolean(process.env.VERCEL) ||
+  (typeof frontendUrl === "string" && frontendUrl.length > 0 && !frontendUrl.includes("localhost") && !frontendUrl.includes("127.0.0.1"));
 
 // Cookie তৈরি ও clear—দুই ক্ষেত্রেই একই options ব্যবহার হবে।
 export const cookieOptions = {
@@ -283,8 +287,14 @@ export const googleLoginService = async (
   }
 
   const cleanToken = idToken.trim();
-  const rawClientId = process.env.GOOGLE_CLIENT_ID || "";
-  const clientId = rawClientId.trim().replace(/^["']|["']$/g, "");
+  const HARDCODED_GOOGLE_CLIENT_ID =
+    "1092641471377-7a1uo4i2jc9n8ljigmb90s19vuojv0ja.apps.googleusercontent.com";
+  const rawClientId = process.env.GOOGLE_CLIENT_ID || HARDCODED_GOOGLE_CLIENT_ID;
+  const clientId = rawClientId.trim().replace(/^["']|["']$/g, "") || HARDCODED_GOOGLE_CLIENT_ID;
+  const allowedAudiences = Array.from(
+    new Set([clientId, HARDCODED_GOOGLE_CLIENT_ID].filter(Boolean))
+  );
+
 
   console.log("[Google Auth] Incoming token (first 25 chars):", cleanToken.slice(0, 25) + "...");
   console.log("[Google Auth] Incoming token length:", cleanToken.length);
@@ -301,12 +311,12 @@ export const googleLoginService = async (
       const client = new OAuth2Client(clientId || undefined);
       const ticket = await client.verifyIdToken({
         idToken: cleanToken,
-        audience: clientId || undefined,
+        audience: allowedAudiences,
       });
       payload = ticket.getPayload();
       console.log("[Google Auth] OAuth2Client.verifyIdToken succeeded. Email:", payload?.email);
     } catch (jwtErr: any) {
-      console.warn("[Google Auth] verifyIdToken with audience failed:", jwtErr?.message || jwtErr);
+      console.error("[Google Auth Error Details - verifyIdToken with audience]:", jwtErr?.message || jwtErr);
 
       // Try verifying without audience constraint if audience failed
       try {
@@ -315,7 +325,7 @@ export const googleLoginService = async (
         payload = ticket.getPayload();
         console.log("[Google Auth] verifyIdToken without audience succeeded. Email:", payload?.email);
       } catch (relaxedJwtErr: any) {
-        console.warn("[Google Auth] Relaxed verifyIdToken also failed:", relaxedJwtErr?.message || relaxedJwtErr);
+        console.error("[Google Auth Error Details - relaxed verifyIdToken]:", relaxedJwtErr?.message || relaxedJwtErr);
       }
     }
   } else {
@@ -402,7 +412,7 @@ export const googleLoginService = async (
 
   if (!payload || !payload.email) {
     console.error("[Google Auth] All token verification methods failed for incoming token.");
-    throw new ApiError(401, "Invalid Google authorization token");
+    throw new ApiError(401, "Invalid Google login token");
   }
 
   const isEmailVerified =
