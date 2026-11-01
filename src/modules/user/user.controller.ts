@@ -6,7 +6,7 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import sendResponse from "../../utils/sendResponse.js";
 import { prisma } from "../../config/db.js";
 import cloudinary, { uploadOnCloudinary } from "../../config/cloudinary.js";
-import { cookieOptions, hashPassword } from "../auth/auth.service.js";
+import { cookieOptions, hashPassword, sortRolesByPriority } from "../auth/auth.service.js";
 import { anonymizeUserAccount } from "./user.service.js";
 
 export const getCurrentUser = asyncHandler(
@@ -50,7 +50,9 @@ export const getCurrentUser = asyncHandler(
       throw new ApiError(404, "User not found");
     }
 
-    const roleNames = user.roles?.map((r) => r.role?.name).filter(Boolean) || [];
+    const rawRoleNames = user.roles?.map((r) => r.role?.name).filter(Boolean) as string[] || [];
+    const roleNames = sortRolesByPriority(rawRoleNames);
+    const primaryRole = roleNames[0] || "USER";
     const permissionKeys =
       user.roles
         ?.flatMap((r) => r.role?.permissions?.map((p) => p.permission?.key))
@@ -91,6 +93,7 @@ export const getCurrentUser = asyncHandler(
         status: user.status,
         avatarAssetId: user.avatarAssetId,
         avatar: user.avatar,
+        role: primaryRole,
         roles: roleNames,
         roleNames,
         permissions: permissionKeys,

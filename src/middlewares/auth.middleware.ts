@@ -4,6 +4,7 @@ import jwt, { type JwtPayload } from "jsonwebtoken";
 import { prisma } from "../config/db.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { sortRolesByPriority } from "../modules/auth/auth.service.js";
 
 interface TokenPayload extends JwtPayload {
   id: string;
@@ -65,7 +66,9 @@ export const optionalAuth = async (
       });
 
       if (user?.status === "ACTIVE") {
-        const roleNames = user.roles?.map((r: any) => r.role?.name).filter(Boolean) as string[] || [];
+        const rawRoleNames = user.roles?.map((r: any) => r.role?.name).filter(Boolean) as string[] || [];
+        const roleNames = sortRolesByPriority(rawRoleNames);
+        const primaryRole = roleNames[0] || (decoded as TokenPayload & { role?: string }).role || "USER";
         const permissionKeys =
           user.roles
             ?.flatMap((r: any) => r.role?.permissions?.map((p: any) => p.permission?.key))
@@ -81,7 +84,7 @@ export const optionalAuth = async (
           permissionKeys.includes("CREDITS:BYPASS");
 
         req.user = { id: user.id, name: user.name, email: user.email };
-        (req as any).user.role = (decoded as TokenPayload & { role?: string }).role || roleNames[0] || "USER";
+        (req as any).user.role = primaryRole;
         (req as any).user.roles = roleNames;
         (req as any).user.roleNames = roleNames;
         (req as any).user.permissions = permissionKeys;
@@ -162,9 +165,23 @@ export const verifyToken = asyncHandler(
         id: true,
         name: true,
         email: true,
-
-        // UPDATE: আগে query-তে status আনা হতো না।
         status: true,
+        roles: {
+          select: {
+            role: {
+              select: {
+                name: true,
+                permissions: {
+                  select: {
+                    permission: {
+                      select: { key: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -174,13 +191,34 @@ export const verifyToken = asyncHandler(
       throw new ApiError(401, "This account cannot access the service");
     }
 
+    const rawRoleNames = user.roles?.map((r: any) => r.role?.name).filter(Boolean) as string[] || [];
+    const roleNames = sortRolesByPriority(rawRoleNames);
+    const primaryRole = roleNames[0] || (decoded as TokenPayload & { role?: string }).role || "USER";
+    const permissionKeys =
+      user.roles
+        ?.flatMap((r: any) => r.role?.permissions?.map((p: any) => p.permission?.key))
+        .filter(Boolean) as string[] || [];
+
+    const hasCreditBypass =
+      roleNames.includes("SUPER_ADMIN") ||
+      roleNames.includes("ADMIN") ||
+      permissionKeys.includes("UNLIMITED_CREDITS") ||
+      permissionKeys.includes("BYPASS_CREDIT_CHECK") ||
+      permissionKeys.includes("POSTER_CREATE_FREE") ||
+      permissionKeys.includes("POSTER:CREATE:FREE") ||
+      permissionKeys.includes("CREDITS:BYPASS");
+
     // আগের মতোই verified user-কে request context-এ রাখি।
-    // Password বা status req.user-এ দেওয়া হচ্ছে না।
     req.user = {
       id: user.id,
       name: user.name,
       email: user.email,
     };
+    (req as any).user.role = primaryRole;
+    (req as any).user.roles = roleNames;
+    (req as any).user.roleNames = roleNames;
+    (req as any).user.permissions = permissionKeys;
+    (req as any).user.hasCreditBypass = hasCreditBypass;
 
     next();
   },
