@@ -1,12 +1,19 @@
 import { CorsOptions } from "cors";
 
+const cleanUrl = (url?: string) => url?.trim().replace(/^["']|["']$/g, "");
+
+const frontendUrl = cleanUrl(process.env.FRONTEND_URL) || "http://localhost:3000";
+const clientUrl = cleanUrl(process.env.CLIENT_URL) || "http://localhost:3000";
+
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
   "https://sandbox.sslcommerz.com",
   "https://securepay.sslcommerz.com",
-  process.env.CLIENT_URL,
-  process.env.FRONTEND_URL,
+  frontendUrl,
+  clientUrl,
 ].filter(Boolean) as string[];
 
 export const corsOptions: CorsOptions = {
@@ -26,5 +33,12 @@ export const corsOptions: CorsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Cookie",
+    "X-Requested-With",
+    "Accept",
+  ],
+  exposedHeaders: ["Set-Cookie"],
 };

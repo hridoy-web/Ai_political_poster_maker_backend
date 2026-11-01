@@ -169,10 +169,94 @@ const listTemplates = async (query: IListTemplateQuery) => {
   };
 };
 
+// Helper to evaluate if the user possesses privileged template access
+const isPrivilegedTemplateUser = async (user?: {
+  id?: string;
+  role?: string;
+  roles?: string[];
+  roleNames?: string[];
+  permissions?: string[];
+  permissionKeys?: string[];
+  hasCreditBypass?: boolean;
+  userRoles?: Array<{ role?: { name?: string } }>;
+}): Promise<boolean> => {
+  if (!user || !user.id) return false;
+
+  if (user.hasCreditBypass) return true;
+
+  const privilegedRoles = ["SUPER_ADMIN", "ADMIN", "TEMPLATE_MANAGER"];
+  const bypassPermissions = [
+    "MANAGE_TEMPLATES",
+    "UNLIMITED_CREDITS",
+    "BYPASS_CREDIT_CHECK",
+    "POSTER_CREATE_FREE",
+    "PREMIUM_ACCESS_BYPASS",
+  ];
+
+  const directRoles: string[] = [
+    ...(user.role ? [user.role.toUpperCase()] : []),
+    ...(Array.isArray(user.roles) ? user.roles.map((r) => r.toUpperCase()) : []),
+    ...(Array.isArray(user.roleNames) ? user.roleNames.map((r) => r.toUpperCase()) : []),
+    ...(Array.isArray(user.userRoles)
+      ? (user.userRoles.map((ur) => ur.role?.name?.toUpperCase()).filter(Boolean) as string[])
+      : []),
+  ];
+
+  if (directRoles.some((r) => privilegedRoles.includes(r))) {
+    return true;
+  }
+
+  const directPermissions: string[] = [
+    ...(Array.isArray(user.permissions) ? user.permissions.map((p) => p.toUpperCase()) : []),
+    ...(Array.isArray(user.permissionKeys) ? user.permissionKeys.map((p) => p.toUpperCase()) : []),
+  ];
+
+  if (directPermissions.some((p) => bypassPermissions.includes(p))) {
+    return true;
+  }
+
+  // Database check in UserRole relation
+  const privilegedRole = await prisma.userRole.findFirst({
+    where: {
+      userId: user.id,
+      OR: [
+        {
+          role: {
+            name: { in: privilegedRoles },
+          },
+        },
+        {
+          role: {
+            permissions: {
+              some: {
+                permission: {
+                  key: { in: bypassPermissions },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+    select: { roleId: true },
+  });
+
+  return Boolean(privilegedRole);
+};
+
 //BillingService.getEntitlements 
 const getTemplateById = async (
   id: string,
-  user?: { id: string; role?: string }
+  user?: {
+    id?: string;
+    role?: string;
+    roles?: string[];
+    roleNames?: string[];
+    permissions?: string[];
+    permissionKeys?: string[];
+    hasCreditBypass?: boolean;
+    userRoles?: Array<{ role?: { name?: string } }>;
+  }
 ) => {
   const template = await prisma.template.findUnique({
     where: { id },
@@ -190,14 +274,16 @@ const getTemplateById = async (
 
   if (!template) throw new ApiError(404, "Template not found");
 
+  const hasPrivilegedAccess = await isPrivilegedTemplateUser(user);
   const isCategoryActive = template.category?.isActive ?? true;
-  if (user?.role !== "SUPER_ADMIN" && (template.status !== "PUBLISHED" || !isCategoryActive)) {
+
+  if (!hasPrivilegedAccess && (template.status !== "PUBLISHED" || !isCategoryActive)) {
     throw new ApiError(404, "Template not found or not published");
   }
 
-  // Premium Access Check via Hridoy's BillingService
+  // Premium Access Check via BillingService
   if (template.accessLevel === "PREMIUM") {
-    if (user?.role !== "SUPER_ADMIN") {
+    if (!hasPrivilegedAccess) {
       if (!user?.id) {
         throw new ApiError(401, "Authentication required to access premium template");
       }

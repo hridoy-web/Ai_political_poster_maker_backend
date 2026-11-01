@@ -408,39 +408,84 @@ class PosterService {
 
     // 1. Billing Reservation
     if (owner.userId) {
-      // Authenticated User: Verify and reserve credit (or grant starter credit)
-      const wallet = await prisma.creditWallet.findUnique({
-        where: { userId: owner.userId },
+      // Dynamic Role & Permission Inspection for Credit Bypass
+      const userWithRoles = await prisma.user.findUnique({
+        where: { id: owner.userId },
+        select: {
+          roles: {
+            select: {
+              role: {
+                select: {
+                  name: true,
+                  permissions: {
+                    select: {
+                      permission: {
+                        select: { key: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
 
-      const currentBalance = wallet ? wallet.balance : 5; // Default 5 starter credits if uninitialized
+      const roleNames =
+        userWithRoles?.roles?.map((r) => r.role?.name?.toUpperCase()).filter(Boolean) || [];
+      const permissionKeys =
+        userWithRoles?.roles
+          ?.flatMap((r) => r.role?.permissions?.map((p) => p.permission?.key?.toUpperCase()))
+          .filter(Boolean) || [];
 
-      if (currentBalance < 1) {
-        throw new ApiError(402, "Insufficient poster credits. Please recharge your credit wallet.");
+      const hasBypassPermission =
+        roleNames.includes("SUPER_ADMIN") ||
+        roleNames.includes("ADMIN") ||
+        permissionKeys.includes("UNLIMITED_CREDITS") ||
+        permissionKeys.includes("BYPASS_CREDIT_CHECK") ||
+        permissionKeys.includes("POSTER_CREATE_FREE") ||
+        permissionKeys.includes("POSTER:CREATE:FREE") ||
+        permissionKeys.includes("CREDITS:BYPASS");
+
+      if (!hasBypassPermission) {
+        // Authenticated User: Verify and reserve credit (or grant starter credit)
+        const wallet = await prisma.creditWallet.findUnique({
+          where: { userId: owner.userId },
+        });
+
+        const currentBalance = wallet ? wallet.balance : 5; // Default 5 starter credits if uninitialized
+
+        if (currentBalance < 1) {
+          throw new ApiError(402, "Insufficient poster credits. Please recharge your credit wallet.");
+        }
+
+        await prisma.$transaction(async (tx) => {
+          const updatedWallet = await tx.creditWallet.upsert({
+            where: { userId: owner.userId! },
+            create: {
+              userId: owner.userId!,
+              balance: 4,
+            },
+            update: {
+              balance: { decrement: 1 },
+            },
+          });
+
+          await tx.creditLedgerEntry.create({
+            data: {
+              userId: owner.userId!,
+              type: "POSTER_DEBIT",
+              amount: -1,
+              balanceAfter: updatedWallet.balance,
+              idempotencyKey: `reserve_${renderIdempotencyKey}`,
+            },
+          });
+        });
+      } else {
+        console.log(
+          `[PosterService] Credit check & deduction bypassed for user ${owner.userId} (roles: [${roleNames.join(", ")}], permissions: [${permissionKeys.join(", ")}])`
+        );
       }
-
-      await prisma.$transaction(async (tx) => {
-        const updatedWallet = await tx.creditWallet.upsert({
-          where: { userId: owner.userId! },
-          create: {
-            userId: owner.userId!,
-            balance: 4,
-          },
-          update: {
-            balance: { decrement: 1 },
-          },
-        });
-
-        await tx.creditLedgerEntry.create({
-          data: {
-            userId: owner.userId!,
-            type: "POSTER_DEBIT",
-            amount: -1,
-            balanceAfter: updatedWallet.balance,
-            idempotencyKey: `reserve_${renderIdempotencyKey}`,
-          },
-        });
-      });
     } else if (owner.guestSessionId) {
       // Guest User: Check free quota (max 3 successful posters)
       const guestSession = await prisma.guestSession.findUnique({

@@ -169,14 +169,23 @@ export async function processPosterRenderJob(
 
       // Billing Refund: If authenticated user had credits debited, refund them via BillingService
       if (payload.userId) {
-        await BillingService.refundCredits(
-          payload.userId,
-          1,
-          `refund_${payload.idempotencyKey || crypto.randomUUID()}`
-        );
-        console.log(
-          `[PosterWorker] Settle Refund: Credited back 1 credit via BillingService to user ${payload.userId} for failed poster ${payload.posterId}.`
-        );
+        const debitEntry = await prisma.creditLedgerEntry.findFirst({
+          where: {
+            userId: payload.userId,
+            idempotencyKey: `reserve_${payload.idempotencyKey}`,
+          },
+        });
+
+        if (debitEntry) {
+          await BillingService.refundCredits(
+            payload.userId,
+            1,
+            `refund_${payload.idempotencyKey || crypto.randomUUID()}`
+          );
+          console.log(
+            `[PosterWorker] Settle Refund: Credited back 1 credit via BillingService to user ${payload.userId} for failed poster ${payload.posterId}.`
+          );
+        }
       }
     } catch (refundError) {
       console.error(

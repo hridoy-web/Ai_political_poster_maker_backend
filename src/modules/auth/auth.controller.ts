@@ -8,6 +8,7 @@ import {
   SEVEN_DAYS,
   registerUser,
   loginUser,
+  googleLoginService,
 } from "./auth.service.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/ApiError.js";
@@ -139,4 +140,31 @@ export const logout = asyncHandler(async (_req: Request, res: Response) => {
     null,
     null,
   );
+});
+
+// POST /api/v1/auth/google
+export const googleLogin = asyncHandler(async (req: Request, res: Response) => {
+  const idToken = req.body?.idToken || req.body?.token || req.body?.credential;
+
+  if (!idToken || typeof idToken !== "string") {
+    throw new ApiError(400, "Google authorization token is required");
+  }
+
+  const result = await googleLoginService(
+    idToken,
+    req.cookies?.guest_session_id
+  );
+
+  res.cookie("token", result.token, {
+    ...cookieOptions,
+    path: "/",
+    maxAge: SEVEN_DAYS,
+  });
+
+  res.clearCookie("guest_session_id", {
+    ...cookieOptions,
+    path: "/",
+  });
+
+  return sendResponse(res, 200, "Google login successful", true, null, result);
 });
