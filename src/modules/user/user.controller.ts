@@ -32,6 +32,13 @@ export const getCurrentUser = asyncHandler(
             role: {
               select: {
                 name: true,
+                permissions: {
+                  select: {
+                    permission: {
+                      select: { key: true },
+                    },
+                  },
+                },
               },
             },
           },
@@ -44,6 +51,19 @@ export const getCurrentUser = asyncHandler(
     }
 
     const roleNames = user.roles?.map((r) => r.role?.name).filter(Boolean) || [];
+    const permissionKeys =
+      user.roles
+        ?.flatMap((r) => r.role?.permissions?.map((p) => p.permission?.key))
+        .filter(Boolean) || [];
+
+    const hasCreditBypass =
+      roleNames.includes("SUPER_ADMIN") ||
+      roleNames.includes("ADMIN") ||
+      permissionKeys.includes("UNLIMITED_CREDITS") ||
+      permissionKeys.includes("BYPASS_CREDIT_CHECK") ||
+      permissionKeys.includes("POSTER_CREATE_FREE") ||
+      permissionKeys.includes("POSTER:CREATE:FREE") ||
+      permissionKeys.includes("CREDITS:BYPASS");
 
     let phone = "";
     if (user.userProfile) {
@@ -73,6 +93,8 @@ export const getCurrentUser = asyncHandler(
         avatar: user.avatar,
         roles: roleNames,
         roleNames,
+        permissions: permissionKeys,
+        hasCreditBypass,
       },
     );
   },
@@ -323,8 +345,8 @@ export const deleteCurrentUser = asyncHandler(
     await anonymizeUserAccount(req.user.id);
 
     // Account anonymize সফল হলে user ও guest—দুই cookie-ই clear করি।
-    res.clearCookie("token", cookieOptions);
-    res.clearCookie("guest_session_id", cookieOptions);
+    res.clearCookie("token", { ...cookieOptions, path: "/" });
+    res.clearCookie("guest_session_id", { ...cookieOptions, path: "/" });
 
     return sendResponse(
       res,

@@ -133,7 +133,7 @@ export async function processPosterRenderJob(
         },
       });
 
-      // Settle Billing: If guest user and pro template, increment their successful posters counter
+      // Settle Billing: If guest user, increment their successful posters counter
       if (payload.guestSessionId && poster.template?.accessLevel === "PREMIUM") {
         await tx.guestSession.update({
           where: { id: payload.guestSessionId },
@@ -142,7 +142,7 @@ export async function processPosterRenderJob(
           },
         });
       }
-      // For registered users: Credit reservation was already debited as POSTER_DEBIT in triggerRender if Pro template
+      // For registered users: Credit reservation was already debited as POSTER_DEBIT in triggerRender
     });
 
     console.log(
@@ -167,16 +167,25 @@ export async function processPosterRenderJob(
         },
       });
 
-      // Billing Refund: If authenticated user had credits debited for Pro template, refund them via BillingService
-      if (payload.userId && poster?.template?.accessLevel === "PREMIUM") {
-        await BillingService.refundCredits(
-          payload.userId,
-          1,
-          `refund_${payload.idempotencyKey || crypto.randomUUID()}`
-        );
-        console.log(
-          `[PosterWorker] Settle Refund: Credited back 1 credit via BillingService to user ${payload.userId} for failed poster ${payload.posterId}.`
-        );
+      // Billing Refund: If authenticated user had credits debited, refund them via BillingService
+      if (payload.userId) {
+        const debitEntry = await prisma.creditLedgerEntry.findFirst({
+          where: {
+            userId: payload.userId,
+            idempotencyKey: `reserve_${payload.idempotencyKey}`,
+          },
+        });
+
+        if (debitEntry) {
+          await BillingService.refundCredits(
+            payload.userId,
+            1,
+            `refund_${payload.idempotencyKey || crypto.randomUUID()}`
+          );
+          console.log(
+            `[PosterWorker] Settle Refund: Credited back 1 credit via BillingService to user ${payload.userId} for failed poster ${payload.posterId}.`
+          );
+        }
       }
     } catch (refundError) {
       console.error(

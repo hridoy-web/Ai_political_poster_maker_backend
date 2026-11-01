@@ -1,3 +1,4 @@
+import "./config/env.js";
 import app from "./app.js";
 import prisma from "./lib/prisma.js";
 import { startPosterWorkerQueue } from "./workers/poster.worker.js";

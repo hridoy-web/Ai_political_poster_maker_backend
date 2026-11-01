@@ -405,12 +405,51 @@ class PosterService {
     }
 
     const template = await validateTemplate(poster.templateId);
-
-    // 1. Billing Reservation: Credit is only deducted for PREMIUM (Pro) templates!
     const isPremiumTemplate = template?.accessLevel === "PREMIUM";
 
+    // 1. Billing Reservation: Credit is only deducted for PREMIUM (Pro) templates!
     if (isPremiumTemplate) {
-      if (owner.userId) {
+    if (owner.userId) {
+      // Dynamic Role & Permission Inspection for Credit Bypass
+      const userWithRoles = await prisma.user.findUnique({
+        where: { id: owner.userId },
+        select: {
+          roles: {
+            select: {
+              role: {
+                select: {
+                  name: true,
+                  permissions: {
+                    select: {
+                      permission: {
+                        select: { key: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const roleNames =
+        userWithRoles?.roles?.map((r) => r.role?.name?.toUpperCase()).filter(Boolean) || [];
+      const permissionKeys =
+        userWithRoles?.roles
+          ?.flatMap((r) => r.role?.permissions?.map((p) => p.permission?.key?.toUpperCase()))
+          .filter(Boolean) || [];
+
+      const hasBypassPermission =
+        roleNames.includes("SUPER_ADMIN") ||
+        roleNames.includes("ADMIN") ||
+        permissionKeys.includes("UNLIMITED_CREDITS") ||
+        permissionKeys.includes("BYPASS_CREDIT_CHECK") ||
+        permissionKeys.includes("POSTER_CREATE_FREE") ||
+        permissionKeys.includes("POSTER:CREATE:FREE") ||
+        permissionKeys.includes("CREDITS:BYPASS");
+
+      if (!hasBypassPermission) {
         // Authenticated User: Verify and reserve credit (or grant starter credit)
         const wallet = await prisma.creditWallet.findUnique({
           where: { userId: owner.userId },
@@ -444,20 +483,26 @@ class PosterService {
             },
           });
         });
-      } else if (owner.guestSessionId) {
-        // Guest User: Check free quota (max 3 successful posters)
-        const guestSession = await prisma.guestSession.findUnique({
-          where: { id: owner.guestSessionId },
-          select: { successfulPosters: true },
-        });
-
-        if (guestSession && guestSession.successfulPosters >= 3) {
-          throw new ApiError(
-            403,
-            "Guest free poster limit reached (maximum 3 posters). Please register an account to continue."
-          );
-        }
+      } else {
+        console.log(
+          `[PosterService] Credit check & deduction bypassed for user ${owner.userId} (roles: [${roleNames.join(", ")}], permissions: [${permissionKeys.join(", ")}])`
+        );
       }
+    } else if (owner.guestSessionId) {
+      // Guest User: Check free quota (max 3 successful posters)
+      const guestSession = await prisma.guestSession.findUnique({
+        where: { id: owner.guestSessionId },
+        select: { successfulPosters: true },
+      });
+
+      if (guestSession && guestSession.successfulPosters >= 3) {
+        throw new ApiError(
+          403,
+          "Guest free poster limit reached (maximum 3 posters). Please register an account to continue."
+        );
+      }
+    }
+
     }
 
     // 2. Transition status to PROCESSING atomically

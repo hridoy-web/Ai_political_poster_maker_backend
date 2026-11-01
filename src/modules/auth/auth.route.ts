@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { login, logout, register } from "./auth.controller.js";
+import { login, logout, register, googleLogin } from "./auth.controller.js";
 import { upload } from "../../middlewares/multer.middleware.js";
 import { verifyToken } from "../../middlewares/auth.middleware.js";
 import { rateLimit } from "../../middlewares/rateLimit.middleware.js";
-import { googleLogin } from "./googleLogin.controller.js";
+
 
 const authRoutes = Router();
 
