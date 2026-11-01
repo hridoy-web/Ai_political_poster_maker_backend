@@ -254,11 +254,26 @@ const updateUserRole = async (userId: string, payload: UpdateUserRolePayload) =>
 const updateUserStatus = async (userId: string, status: AccountStatus) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true },
+    select: {
+      id: true,
+      roles: {
+        select: {
+          role: {
+            select: { name: true },
+          },
+        },
+      },
+    },
   });
 
   if (!user) {
     throw new ApiError(404, "User not found");
+  }
+
+  // Prevent banning or suspending Super Admin accounts
+  const isTargetSuperAdmin = user.roles.some((r) => r.role?.name === "SUPER_ADMIN");
+  if (isTargetSuperAdmin && status !== AccountStatus.ACTIVE) {
+    throw new ApiError(403, "Super Admin accounts cannot be banned or suspended");
   }
 
   if (!Object.values(AccountStatus).includes(status)) {
