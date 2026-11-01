@@ -34,7 +34,11 @@ export const errorMiddleware: ErrorRequestHandler = (
     }
   }
 
-  console.error("🔥 Global Error Caught:", err);
+  if (statusCode >= 500) {
+    console.error("🔥 Global Error Caught:", err);
+  } else if (process.env.NODE_ENV !== "production") {
+    console.warn(`[HTTP ${statusCode}]:`, message);
+  }
 
   res.status(statusCode).json({
     success: false,
