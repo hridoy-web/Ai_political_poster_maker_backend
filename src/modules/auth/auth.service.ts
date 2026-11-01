@@ -122,13 +122,20 @@ export const registerUser = async (
           },
         });
 
-        const defaultRole = await tx.role.findUnique({
+        let defaultRole = await tx.role.findUnique({
           where: { name: "USER" },
           select: { id: true },
         });
 
         if (!defaultRole) {
-          throw new Error("USER role is not seeded");
+          defaultRole = await tx.role.create({
+            data: {
+              name: "USER",
+              description: "Standard user access",
+              isSystem: true,
+            },
+            select: { id: true },
+          });
         }
 
         await tx.userRole.create({
@@ -274,12 +281,27 @@ export const googleLoginUser = async (
   let user = await prisma.user.findUnique({ where: { email }, select });
 
   if (!user) {
+    let defaultRole = await prisma.role.findUnique({
+      where: { name: "USER" },
+      select: { id: true },
+    });
+    if (!defaultRole) {
+      defaultRole = await prisma.role.create({
+        data: {
+          name: "USER",
+          description: "Standard user access",
+          isSystem: true,
+        },
+        select: { id: true },
+      });
+    }
+
     user = await prisma.user.create({
       data: {
         name,
         email,
         password: NO_PASSWORD_MARKER,
-        roles: { create: { role: { connect: { name: "USER" } } } },
+        roles: { create: { role: { connect: { id: defaultRole.id } } } },
       },
       select,
     });
