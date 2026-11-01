@@ -1,6 +1,6 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../config/db.js";
 
-const prisma = new PrismaClient();
+// Using centralized prisma instance with pg adapter
 
 async function main() {
   console.log("🌱 Seeding Categories and Templates...");
