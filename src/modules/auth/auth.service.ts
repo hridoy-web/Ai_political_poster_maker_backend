@@ -363,7 +363,7 @@ export const googleLoginService = async (
     try {
       console.log("[Google Auth] Querying https://oauth2.googleapis.com/tokeninfo...");
       const tokenInfoRes = await fetch(
-        `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(cleanToken)}`
+        `https://oauth2.googleapis.com/tokeninfo?${isJwt ? "id_token" : "access_token"}=${encodeURIComponent(cleanToken)}`
       );
 
       if (tokenInfoRes.ok) {
@@ -373,7 +373,7 @@ export const googleLoginService = async (
           email: tokenData.email,
           email_verified: tokenData.email_verified,
           name: tokenData.email?.split("@")[0] || "User",
-          picture: null,
+          picture: tokenData.picture || null,
         };
       } else {
         const errText = await tokenInfoRes.text();
@@ -478,10 +478,21 @@ export const googleLoginService = async (
         },
       });
 
-      const defaultRole = await tx.role.findUnique({
+      let defaultRole = await tx.role.findUnique({
         where: { name: "USER" },
         select: { id: true },
       });
+
+      if (!defaultRole) {
+        defaultRole = await tx.role.create({
+          data: {
+            name: "USER",
+            description: "Standard user access",
+            isSystem: true,
+          },
+          select: { id: true },
+        });
+      }
 
       if (defaultRole) {
         await tx.userRole.create({
