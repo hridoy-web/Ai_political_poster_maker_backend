@@ -9,7 +9,9 @@ import {
   registerUser,
   loginUser,
   googleLoginService,
+  generateToken,
 } from "./auth.service.js";
+import { claimGuestSessionForUser } from "../guest/guest.service.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/ApiError.js";
 import sendResponse from "../../utils/sendResponse.js";
@@ -74,13 +76,35 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
     const user = await registerUser(name, email, password, avatar);
 
+    const token = generateToken(user.id);
+
+    res.cookie("token", token, {
+      ...cookieOptions,
+      path: "/",
+      maxAge: SEVEN_DAYS,
+    });
+
+    if (req.cookies?.guest_session_id) {
+      await claimGuestSessionForUser(req.cookies.guest_session_id, user.id).catch(() => {});
+      res.clearCookie("guest_session_id", { ...cookieOptions, path: "/" });
+    }
+
     return sendResponse(
       res,
       201,
       "User registered successfully",
       true,
       null,
-      user,
+      {
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          roles: ["USER"],
+          roleNames: ["USER"],
+        },
+      },
     );
   } catch (error) {
     // Registration ব্যর্থ হলে Cloudinary-তে ওঠা ছবিটি মুছে দিই।
@@ -119,18 +143,19 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
   res.cookie("token", result.token, {
     ...cookieOptions,
+    path: "/",
     maxAge: SEVEN_DAYS,
   });
 
   // Login সফল হওয়ার পর পুরোনো guest cookie সরিয়ে দিই।
-  res.clearCookie("guest_session_id", cookieOptions);
+  res.clearCookie("guest_session_id", { ...cookieOptions, path: "/" });
 
   return sendResponse(res, 200, "Login successful", true, null, result);
 });
 
 // POST /api/v1/auth/logout
 export const logout = asyncHandler(async (_req: Request, res: Response) => {
-  res.clearCookie("token", cookieOptions);
+  res.clearCookie("token", { ...cookieOptions, path: "/" });
 
   return sendResponse(
     res,
