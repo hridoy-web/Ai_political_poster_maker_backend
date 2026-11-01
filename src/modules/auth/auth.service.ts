@@ -5,6 +5,7 @@ import { prisma } from "../../config/db.js";
 import { ApiError } from "../../utils/ApiError.js";
 import { withPrismaErrorHandling } from "../../utils/withPrismaErrorHandling.js";
 import { claimGuestSessionForUser } from "../guest/guest.service.js";
+import { getFirebaseAuth } from "../../config/firebaseAdmin.js";
 
 export const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 
@@ -19,8 +20,10 @@ export const cookieOptions = {
   path: "/",
 };
 
-const normalizeEmail = (email: string): string =>
+export const normalizeEmail = (email: string): string =>
   email.trim().toLowerCase();
+
+export const NO_PASSWORD_MARKER = "!GOOGLE_AUTH_NO_PASSWORD";
 
 const getJwtSecret = (): string => {
   const secret = process.env.JWT_SECRET;
@@ -191,9 +194,16 @@ export const loginUser = async (
     },
   });
 
-  if (!user || Buffer.byteLength(password, "utf8") > 72) {
+  if (
+    !user ||
+    user.password === NO_PASSWORD_MARKER ||
+    Buffer.byteLength(password, "utf8") > 72
+  ) {
     throw new ApiError(401, "Invalid email or password");
   }
+
+
+
 
   const isPasswordValid = await verifyPassword(password, user.password);
 
@@ -210,6 +220,84 @@ export const loginUser = async (
 
   const token = generateToken(user.id);
   const roleNames = user.roles?.map((r) => r.role?.name).filter(Boolean) || [];
+
+  return {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      roles: roleNames,
+      roleNames,
+    },
+    token,
+  };
+};
+
+
+
+export const googleLoginUser = async (
+  idToken: string,
+  guestToken?: unknown,
+) => {
+
+  console.log("googleLoginUser")
+  // 1. Verify the Firebase ID token
+  let decoded;
+
+  try {
+    decoded = await getFirebaseAuth().verifyIdToken(idToken);
+  } catch {
+    throw new ApiError(401, "Invalid Google login token");
+  }
+
+  if (
+    decoded.firebase?.sign_in_provider !== "google.com" ||
+    !decoded.email ||
+    !decoded.email_verified
+  ) {
+    throw new ApiError(401, "Your Google email is not verified");
+  }
+
+  const email = normalizeEmail(decoded.email);
+  const name = decoded.name?.trim() || email.split("@")[0] || "User";
+
+  const select = {
+    id: true,
+    name: true,
+    email: true,
+    status: true,
+    password: true,
+    roles: { select: { role: { select: { name: true } } } },
+  } as const;
+
+  // 2. Look up the user; create a new one if none exists
+  let user = await prisma.user.findUnique({ where: { email }, select });
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: NO_PASSWORD_MARKER,
+        roles: { create: { role: { connect: { name: "USER" } } } },
+      },
+      select,
+    });
+  } else if (user.status !== "ACTIVE") {
+    throw new ApiError(403, "This account is not active");
+  } else if (user.password !== NO_PASSWORD_MARKER) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { password: NO_PASSWORD_MARKER },
+    });
+  }
+
+  // 3. Claim the guest session's data for this user
+  await claimGuestSessionForUser(guestToken, user.id);
+
+  // 4. Generate the auth token
+  const token = generateToken(user.id);
+  const roleNames = user.roles.map((r) => r.role.name).filter(Boolean);
 
   return {
     user: {
