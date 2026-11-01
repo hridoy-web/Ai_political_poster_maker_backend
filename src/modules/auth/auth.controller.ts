@@ -156,6 +156,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 // POST /api/v1/auth/logout
 export const logout = asyncHandler(async (_req: Request, res: Response) => {
   res.clearCookie("token", { ...cookieOptions, path: "/" });
+  res.clearCookie("accessToken", { ...cookieOptions, path: "/" });
 
   return sendResponse(
     res,
