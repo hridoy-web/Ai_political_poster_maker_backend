@@ -1,3 +1,4 @@
+import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 
@@ -5,18 +6,28 @@ import { prisma } from "../../config/db.js";
 import { ApiError } from "../../utils/ApiError.js";
 import { withPrismaErrorHandling } from "../../utils/withPrismaErrorHandling.js";
 import { claimGuestSessionForUser } from "../guest/guest.service.js";
-import { getFirebaseAuth } from "../../config/firebaseAdmin.js";
 
 export const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 
 // Cookie তৈরি ও clear—দুই ক্ষেত্রেই একই options ব্যবহার হবে।
+const cleanEnv = (val?: string) => val?.trim().replace(/^[\"\']|[\"\']$/g, "");
+const nodeEnv = cleanEnv(process.env.NODE_ENV);
+const frontendUrl = cleanEnv(process.env.FRONTEND_URL);
+
+// Local development check: if NODE_ENV is not production or frontend is running on localhost (HTTP)
+const isLocal =
+  nodeEnv !== "production" ||
+  !frontendUrl ||
+  frontendUrl.includes("localhost") ||
+  frontendUrl.includes("127.0.0.1");
+
+export const isProduction = !isLocal;
+
+// Cookie তৈরি ও clear—দুই ক্ষেত্রেই একই options ব্যবহার হবে।
 export const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite:
-    process.env.NODE_ENV === "production"
-      ? ("none" as const)
-      : ("lax" as const),
+  secure: isProduction,
+  sameSite: isProduction ? ("none" as const) : ("lax" as const),
   path: "/",
 };
 
@@ -104,231 +115,4 @@ export const registerUser = async (
 
   const passwordHash = await hashPassword(password);
 
-  // UPDATED: user, Asset ও avatar relation একই transaction-এ লেখা হয়।
-  // Duplicate email হলে shared helper সেটিকে 409 error-এ বদলায়।
-  return withPrismaErrorHandling(
-    () =>
-      prisma.$transaction(async (tx) => {
-        const user = await tx.user.create({
-          data: {
-            name: normalizedName,
-            email: normalizedEmail,
-            password: passwordHash,
-          },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        });
-
-        let defaultRole = await tx.role.findUnique({
-          where: { name: "USER" },
-          select: { id: true },
-        });
-
-        if (!defaultRole) {
-          defaultRole = await tx.role.create({
-            data: {
-              name: "USER",
-              description: "Standard user access",
-              isSystem: true,
-            },
-            select: { id: true },
-          });
-        }
-
-        await tx.userRole.create({
-          data: {
-            userId: user.id,
-            roleId: defaultRole.id,
-          },
-        });
-        if (avatar) {
-          const asset = await tx.asset.create({
-            data: {
-              ownerUserId: user.id,
-              purpose: "USER_UPLOAD",
-              storageKey: avatar.storageKey,
-              mimeType: avatar.mimeType,
-              sizeBytes: avatar.sizeBytes,
-            },
-            select: {
-              id: true,
-            },
-          });
-
-          await tx.user.update({
-            where: { id: user.id },
-            data: {
-              avatarAssetId: asset.id,
-            },
-          });
-        }
-
-        return user;
-      }),
-    {
-      email: "User already exists with this email",
-    },
-  );
-};
-
-export const loginUser = async (
-  email: string,
-  password: string,
-  guestToken?: unknown,
-) => {
-  const normalizedEmail = normalizeEmail(email);
-
-  const user = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      password: true,
-      status: true,
-      roles: {
-        select: {
-          role: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (
-    !user ||
-    user.password === NO_PASSWORD_MARKER ||
-    Buffer.byteLength(password, "utf8") > 72
-  ) {
-    throw new ApiError(401, "Invalid email or password");
-  }
-
-
-
-
-  const isPasswordValid = await verifyPassword(password, user.password);
-
-  if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid email or password");
-  }
-
-  if (user.status !== "ACTIVE") {
-    throw new ApiError(403, "This account is not active");
-  }
-
-  // Login যাচাই সফল হওয়ার পরেই guest-এর data user account-এ claim করি।
-  await claimGuestSessionForUser(guestToken, user.id);
-
-  const token = generateToken(user.id);
-  const roleNames = user.roles?.map((r) => r.role?.name).filter(Boolean) || [];
-
-  return {
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      roles: roleNames,
-      roleNames,
-    },
-    token,
-  };
-};
-
-
-
-export const googleLoginUser = async (
-  idToken: string,
-  guestToken?: unknown,
-) => {
-
-  console.log("googleLoginUser")
-  // 1. Verify the Firebase ID token
-  let decoded;
-
-  try {
-    decoded = await getFirebaseAuth().verifyIdToken(idToken);
-  } catch {
-    throw new ApiError(401, "Invalid Google login token");
-  }
-
-  if (
-    decoded.firebase?.sign_in_provider !== "google.com" ||
-    !decoded.email ||
-    !decoded.email_verified
-  ) {
-    throw new ApiError(401, "Your Google email is not verified");
-  }
-
-  const email = normalizeEmail(decoded.email);
-  const name = decoded.name?.trim() || email.split("@")[0] || "User";
-
-  const select = {
-    id: true,
-    name: true,
-    email: true,
-    status: true,
-    password: true,
-    roles: { select: { role: { select: { name: true } } } },
-  } as const;
-
-  // 2. Look up the user; create a new one if none exists
-  let user = await prisma.user.findUnique({ where: { email }, select });
-
-  if (!user) {
-    let defaultRole = await prisma.role.findUnique({
-      where: { name: "USER" },
-      select: { id: true },
-    });
-    if (!defaultRole) {
-      defaultRole = await prisma.role.create({
-        data: {
-          name: "USER",
-          description: "Standard user access",
-          isSystem: true,
-        },
-        select: { id: true },
-      });
-    }
-
-    user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: NO_PASSWORD_MARKER,
-        roles: { create: { role: { connect: { id: defaultRole.id } } } },
-      },
-      select,
-    });
-  } else if (user.status !== "ACTIVE") {
-    throw new ApiError(403, "This account is not active");
-  } else if (user.password !== NO_PASSWORD_MARKER) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { password: NO_PASSWORD_MARKER },
-    });
-  }
-
-  // 3. Claim the guest session's data for this user
-  await claimGuestSessionForUser(guestToken, user.id);
-
-  // 4. Generate the auth token
-  const token = generateToken(user.id);
-  const roleNames = user.roles.map((r) => r.role.name).filter(Boolean);
-
-  return {
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      roles: roleNames,
-      roleNames,
-    },
-    token,
-  };
-};
+  // user, Asset ও avatar relation একই transaction-এ লেখা হয়।

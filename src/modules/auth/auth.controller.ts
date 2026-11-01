@@ -8,6 +8,7 @@ import {
   SEVEN_DAYS,
   registerUser,
   loginUser,
+  googleLoginService,
   generateToken,
 } from "./auth.service.js";
 import { claimGuestSessionForUser } from "../guest/guest.service.js";
@@ -79,12 +80,13 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
     res.cookie("token", token, {
       ...cookieOptions,
+      path: "/",
       maxAge: SEVEN_DAYS,
     });
 
     if (req.cookies?.guest_session_id) {
       await claimGuestSessionForUser(req.cookies.guest_session_id, user.id).catch(() => {});
-      res.clearCookie("guest_session_id", cookieOptions);
+      res.clearCookie("guest_session_id", { ...cookieOptions, path: "/" });
     }
 
     return sendResponse(
@@ -141,18 +143,19 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
   res.cookie("token", result.token, {
     ...cookieOptions,
+    path: "/",
     maxAge: SEVEN_DAYS,
   });
 
   // Login সফল হওয়ার পর পুরোনো guest cookie সরিয়ে দিই।
-  res.clearCookie("guest_session_id", cookieOptions);
+  res.clearCookie("guest_session_id", { ...cookieOptions, path: "/" });
 
   return sendResponse(res, 200, "Login successful", true, null, result);
 });
 
 // POST /api/v1/auth/logout
 export const logout = asyncHandler(async (_req: Request, res: Response) => {
-  res.clearCookie("token", cookieOptions);
+  res.clearCookie("token", { ...cookieOptions, path: "/" });
 
   return sendResponse(
     res,
@@ -164,3 +167,29 @@ export const logout = asyncHandler(async (_req: Request, res: Response) => {
   );
 });
 
+// POST /api/v1/auth/google
+export const googleLogin = asyncHandler(async (req: Request, res: Response) => {
+  const idToken = req.body?.idToken || req.body?.token || req.body?.credential;
+
+  if (!idToken || typeof idToken !== "string") {
+    throw new ApiError(400, "Google authorization token is required");
+  }
+
+  const result = await googleLoginService(
+    idToken,
+    req.cookies?.guest_session_id
+  );
+
+  res.cookie("token", result.token, {
+    ...cookieOptions,
+    path: "/",
+    maxAge: SEVEN_DAYS,
+  });
+
+  res.clearCookie("guest_session_id", {
+    ...cookieOptions,
+    path: "/",
+  });
+
+  return sendResponse(res, 200, "Google login successful", true, null, result);
+});

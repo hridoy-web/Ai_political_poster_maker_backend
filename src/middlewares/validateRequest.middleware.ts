@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodTypeAny } from 'zod';
+import { z, ZodType } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 
-export const validateRequest = (schema: ZodTypeAny) => {
+export const validateRequest = (schema: ZodType) => {
   return asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     const parsed = await schema.safeParseAsync({
       body: req.body,
@@ -12,16 +12,21 @@ export const validateRequest = (schema: ZodTypeAny) => {
     });
 
     if (!parsed.success) {
-      throw new ApiError(
-        400,
-        parsed.error.issues[0]?.message || 'Invalid input data'
-      );
+      const errorMessage =
+        parsed.error.issues[0]?.message || 'Invalid input data';
+      throw new ApiError(400, errorMessage);
     }
 
-    const data = parsed.data as { body?: any; query?: any; params?: any };
+    const data = parsed.data as {
+      body?: Record<string, unknown>;
+      query?: Record<string, unknown>;
+      params?: Record<string, unknown>;
+    };
+
     if (data?.body !== undefined) {
       req.body = data.body;
     }
+
     next();
   });
 };

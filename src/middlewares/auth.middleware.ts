@@ -37,15 +37,54 @@ export const optionalAuth = async (
     if (typeof decoded !== "string" && typeof decoded.id === "string") {
       const user = await prisma.user.findUnique({
         where: { id: decoded.id },
-        select: { id: true, name: true, email: true, status: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          status: true,
+          roles: {
+            select: {
+              role: {
+                select: {
+                  name: true,
+                  permissions: {
+                    select: {
+                      permission: {
+                        select: { key: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
 
       if (user?.status === "ACTIVE") {
+        const roleNames = user.roles?.map((r: any) => r.role?.name).filter(Boolean) as string[] || [];
+        const permissionKeys =
+          user.roles
+            ?.flatMap((r: any) => r.role?.permissions?.map((p: any) => p.permission?.key))
+            .filter(Boolean) as string[] || [];
+
+        const hasCreditBypass =
+          roleNames.includes("SUPER_ADMIN") ||
+          roleNames.includes("ADMIN") ||
+          permissionKeys.includes("UNLIMITED_CREDITS") ||
+          permissionKeys.includes("BYPASS_CREDIT_CHECK") ||
+          permissionKeys.includes("POSTER_CREATE_FREE") ||
+          permissionKeys.includes("POSTER:CREATE:FREE") ||
+          permissionKeys.includes("CREDITS:BYPASS");
+
         req.user = { id: user.id, name: user.name, email: user.email };
-        (req as any).user.role = (decoded as TokenPayload & { role?: string }).role;
+        (req as any).user.role = (decoded as TokenPayload & { role?: string }).role || roleNames[0] || "USER";
+        (req as any).user.roles = roleNames;
+        (req as any).user.roleNames = roleNames;
+        (req as any).user.permissions = permissionKeys;
+        (req as any).user.hasCreditBypass = hasCreditBypass;
       }
     }
-
     next();
   } catch {
     // Invalid or expired user tokens continue only if guest verification succeeds next.
