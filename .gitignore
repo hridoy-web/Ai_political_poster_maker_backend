@@ -5,8 +5,6 @@ node_modules/
 dist/
 
 # Environment Variables
-.env
-.env.*
 !.env.example
 
 # Prisma Local Database & Migrations data (if using SQLite locally, though PostgreSQL is used)
@@ -39,7 +37,6 @@ lerna-debug.log*
 .Trashes
 ehthumbs.db
 Thumbs.db
-.vscode/
 .idea/
 *.suo
 *.ntvs*
@@ -65,3 +62,4 @@ docs/
 *.log.md
 # Antigravity ignore file
 .antigravityignore
+config.bat
