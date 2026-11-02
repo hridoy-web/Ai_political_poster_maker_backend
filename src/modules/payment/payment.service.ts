@@ -1,7 +1,11 @@
 import crypto from 'crypto';
 import { prisma } from '../../lib/prisma.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { initSSLCommerzPayment, validateSSLCommerzPayment } from './sslcommerz.adapter.js';
+import {
+    initSSLCommerzPayment,
+    validateSSLCommerzPayment,
+    validateSSLCommerzByTranId,
+} from './sslcommerz.adapter.js';
 
 export const initiatePaymentSession = async (
     userId: string,
@@ -73,18 +77,15 @@ export const initiatePaymentSession = async (
     });
 
     if (!sslRes?.GatewayPageURL) {
-        throw new ApiError(500, 'Failed to initiate payment session with SSLCommerz');
+        console.error('[SSLCommerz Session Init Error]', sslRes);
+        throw new ApiError(500, `Failed to initiate payment session with SSLCommerz: ${sslRes?.failedreason || 'Gateway unreachable'}`);
     }
 
     let targetUrl = sslRes.GatewayPageURL;
 
     // Direct Sandbox Simulator Routing:
-    // If the user selected a direct channel like bKash or Nagad, route directly to its
-    // sandbox OTP/PIN simulator from sslRes.desc instead of the generic multi-tab EasyCheckOut page.
     if (data.paymentMethod && Array.isArray(sslRes.desc)) {
         const method = data.paymentMethod.toLowerCase().trim();
-        // If user selected a direct wallet (like bKash or Nagad), route directly to its sandbox simulator.
-        // For 'card' / 'cards', GatewayPageURL provides the full choice of Visa, Mastercard, DBBL Nexus, etc.
         if (method !== 'card' && method !== 'cards') {
             const matchedGw = sslRes.desc.find(
                 (item: any) =>
@@ -103,43 +104,97 @@ export const initiatePaymentSession = async (
     return { GatewayPageURL: targetUrl, tranId };
 };
 
-export const verifyAndFulfillPayment = async (valId: string, tranId: string) => {
-    // 1. Webhook Deduplication check
-    const existingWebhook = await prisma.paymentWebhookEvent.findUnique({
-        where: {
-            provider_providerEventId: {
-                provider: 'SSLCOMMERZ',
-                providerEventId: valId || tranId,
-            },
-        },
-    });
-
-    if (existingWebhook && existingWebhook.status === 'PROCESSED') {
-        const existingPayment = await prisma.payment.findUnique({ where: { tranId } });
-        return existingPayment;
+export const verifyAndFulfillPayment = async (valId?: string, tranId?: string) => {
+    if (!tranId && !valId) {
+        throw new ApiError(400, 'Both tran_id and val_id are missing from payment verification request');
     }
 
-    const validationRes = await validateSSLCommerzPayment(valId);
-
-    if (validationRes.status !== 'VALID' && validationRes.status !== 'VALIDATED') {
-        throw new ApiError(400, 'Payment validation failed on SSLCommerz server');
-    }
-
-    return await prisma.$transaction(async (tx) => {
-        const payment = await tx.payment.findUnique({
+    // 1. Fast-path idempotency: If payment is ALREADY marked SUCCEEDED in DB, return immediately
+    if (tranId) {
+        const existingPayment = await prisma.payment.findUnique({
             where: { tranId },
             include: { package: true },
         });
 
-        if (!payment) throw new ApiError(404, 'Payment record not found');
-        if (payment.status === 'SUCCEEDED') return payment; 
+        if (existingPayment && existingPayment.status === 'SUCCEEDED') {
+            return existingPayment;
+        }
+    }
 
-        // Amount & Currency Verification
-        if (Number(payment.amount) !== Number(validationRes.currency_amount)) {
-            throw new ApiError(400, 'Transaction amount discrepancy detected');
+    // 2. Webhook Event Deduplication check
+    const eventId = valId || tranId;
+    if (eventId) {
+        const existingWebhook = await prisma.paymentWebhookEvent.findUnique({
+            where: {
+                provider_providerEventId: {
+                    provider: 'SSLCOMMERZ',
+                    providerEventId: eventId,
+                },
+            },
+        });
+
+        if (existingWebhook && existingWebhook.status === 'PROCESSED' && tranId) {
+            const existingPayment = await prisma.payment.findUnique({ where: { tranId } });
+            if (existingPayment?.status === 'SUCCEEDED') {
+                return existingPayment;
+            }
+        }
+    }
+
+    // 3. Call SSLCommerz Validation API (val_id primary, tran_id fallback)
+    let validationRes: any = null;
+
+    if (valId && valId.trim()) {
+        try {
+            validationRes = await validateSSLCommerzPayment(valId.trim());
+        } catch (err: any) {
+            console.warn(`[SSLCommerz] val_id verification error: ${err?.message}, checking tran_id fallback...`);
+        }
+    }
+
+    if ((!validationRes || (validationRes.status !== 'VALID' && validationRes.status !== 'VALIDATED')) && tranId) {
+        try {
+            const tranValidation = await validateSSLCommerzByTranId(tranId.trim());
+            if (tranValidation?.element && Array.isArray(tranValidation.element) && tranValidation.element.length > 0) {
+                const matched = tranValidation.element.find((el: any) => el.tran_id === tranId) || tranValidation.element[0];
+                if (matched && (matched.status === 'VALID' || matched.status === 'VALIDATED')) {
+                    validationRes = matched;
+                    if (!valId && matched.val_id) {
+                        valId = matched.val_id;
+                    }
+                }
+            }
+        } catch (err: any) {
+            console.error('[SSLCommerz] merchantTransID verification error:', err?.message || err);
+        }
+    }
+
+    if (!validationRes || (validationRes.status !== 'VALID' && validationRes.status !== 'VALIDATED')) {
+        console.error('[SSLCommerz Validation Failed]', { valId, tranId, validationRes });
+        throw new ApiError(400, `Payment validation failed on SSLCommerz server: ${validationRes?.status || 'INVALID_TRANSACTION'}`);
+    }
+
+    const effectiveTranId = tranId || validationRes.tran_id;
+    if (!effectiveTranId) {
+        throw new ApiError(400, 'Cannot fulfill payment: transaction ID could not be resolved');
+    }
+
+    // 4. Atomic Database Updates via prisma.$transaction
+    return await prisma.$transaction(async (tx) => {
+        const payment = await tx.payment.findUnique({
+            where: { tranId: effectiveTranId },
+            include: { package: true },
+        });
+
+        if (!payment) throw new ApiError(404, `Payment record not found for tranId: ${effectiveTranId}`);
+        if (payment.status === 'SUCCEEDED') return payment; // Idempotent guard inside transaction
+
+        // Amount & Currency Verification with floating point tolerance
+        const verifiedAmount = Number(validationRes.currency_amount || validationRes.amount || 0);
+        if (verifiedAmount > 0 && Math.abs(Number(payment.amount) - verifiedAmount) > 0.01) {
+            throw new ApiError(400, `Transaction amount discrepancy: expected ${payment.amount}, received ${verifiedAmount}`);
         }
 
-        // Extract customer phone and gateway transaction ID from validationRes with priority hierarchy
         const isCleanPhone = (val?: string | null): val is string =>
             Boolean(val && /^01[3-9]\d{8}$/.test(val.trim()));
 
@@ -151,16 +206,17 @@ export const verifyAndFulfillPayment = async (valId: string, tranId: string) => 
             payment.customerPhone ||
             null;
         const bankTranId = validationRes.bank_tran_id || null;
+        const effectiveValId = valId || validationRes.val_id || effectiveTranId;
 
         const updatedPayment = await tx.payment.update({
             where: { id: payment.id },
             data: {
                 status: 'SUCCEEDED',
                 verifiedAt: new Date(),
-                providerReference: valId,
-                valId,
-                customerPhone: customerPhone ? String(customerPhone).trim() : null,
-                bankTranId: bankTranId ? String(bankTranId).trim() : null,
+                providerReference: effectiveValId,
+                valId: effectiveValId,
+                customerPhone: customerPhone ? String(customerPhone).trim().slice(0, 50) : null,
+                bankTranId: bankTranId ? String(bankTranId).trim().slice(0, 100) : null,
             },
         });
 
@@ -204,38 +260,57 @@ export const verifyAndFulfillPayment = async (valId: string, tranId: string) => 
             creditsToGrant = Math.floor(Number(payment.amount));
         }
 
+        // Increment Credit Wallet atomically
         const creditWallet = await tx.creditWallet.upsert({
             where: { userId: payment.userId },
             create: { userId: payment.userId, balance: creditsToGrant },
             update: { balance: { increment: creditsToGrant } },
         });
 
-        // CreditLedgerEntry (Immutable Audit Record)
-        await tx.creditLedgerEntry.create({
-            data: {
+        // CreditLedgerEntry with unique idempotency protection
+        await tx.creditLedgerEntry.upsert({
+            where: {
+                userId_idempotencyKey: {
+                    userId: payment.userId,
+                    idempotencyKey: `LEDGER_PAYMENT_${payment.id}`,
+                },
+            },
+            create: {
                 userId: payment.userId,
                 type: payment.packageId ? 'PACKAGE_CREDIT' : 'GRANT',
                 amount: creditsToGrant,
                 balanceAfter: creditWallet.balance,
                 idempotencyKey: `LEDGER_PAYMENT_${payment.id}`,
             },
+            update: {
+                balanceAfter: creditWallet.balance,
+            },
         });
 
-        // Money Wallet (Money Balance) & Ledger Entry
+        // Increment Money Wallet (Balance) and Ledger Entry
         const moneyWallet = await tx.wallet.upsert({
             where: { userId: payment.userId },
             create: { userId: payment.userId, balance: payment.amount, currency: 'BDT' },
             update: { balance: { increment: payment.amount } },
         });
 
-        await tx.moneyLedgerEntry.create({
-            data: {
+        await tx.moneyLedgerEntry.upsert({
+            where: {
+                userId_idempotencyKey: {
+                    userId: payment.userId,
+                    idempotencyKey: `LEDGER_MONEY_${payment.id}`,
+                },
+            },
+            create: {
                 userId: payment.userId,
                 type: 'RECHARGE',
                 amount: payment.amount,
                 currency: 'BDT',
                 balanceAfter: moneyWallet.balance,
                 idempotencyKey: `LEDGER_MONEY_${payment.id}`,
+            },
+            update: {
+                balanceAfter: moneyWallet.balance,
             },
         });
 
@@ -249,13 +324,13 @@ export const verifyAndFulfillPayment = async (valId: string, tranId: string) => 
             where: {
                 provider_providerEventId: {
                     provider: 'SSLCOMMERZ',
-                    providerEventId: valId || tranId,
+                    providerEventId: effectiveValId,
                 },
             },
             create: {
                 paymentId: payment.id,
                 provider: 'SSLCOMMERZ',
-                providerEventId: valId || tranId,
+                providerEventId: effectiveValId,
                 signatureValid: true,
                 payloadHash,
                 status: 'PROCESSED',

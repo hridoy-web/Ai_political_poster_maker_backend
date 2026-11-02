@@ -4,14 +4,16 @@ import { buildSloganPrompt, parseSlogansJson } from "../prompt.builder.js";
 
 export class GeminiProvider implements IAiTextProvider {
   public readonly name = "gemini" as const;
-  public readonly defaultModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  public readonly defaultModel: string;
   private client: GoogleGenAI | null = null;
 
   constructor() {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const rawKey = process.env.GEMINI_API_KEY || "";
+    const apiKey = rawKey.trim().replace(/^["']|["']$/g, "");
     if (apiKey) {
       this.client = new GoogleGenAI({ apiKey });
     }
+    this.defaultModel = (process.env.GEMINI_MODEL || "gemini-1.5-flash").trim().replace(/^["']|["']$/g, "");
   }
 
   public isConfigured(): boolean {

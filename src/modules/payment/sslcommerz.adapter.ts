@@ -3,8 +3,8 @@ import axios from 'axios';
 const getStoreConfig = () => {
     const isLive = process.env.SSLCOMMERZ_IS_LIVE === 'true';
     return {
-        storeId: process.env.SSLCOMMERZ_STORE_ID || 'poste6ade7b12837f4',
-        storePass: process.env.SSLCOMMERZ_STORE_PASSWORD || 'poste6ade7b12837f4@ssl',
+        storeId: (process.env.SSLCOMMERZ_STORE_ID || 'poste6ade7b12837f4').trim().replace(/^["']|["']$/g, ''),
+        storePass: (process.env.SSLCOMMERZ_STORE_PASSWORD || 'poste6ade7b12837f4@ssl').trim().replace(/^["']|["']$/g, ''),
         baseUrl: isLive ? 'https://securepay.sslcommerz.com' : 'https://sandbox.sslcommerz.com',
     };
 };
@@ -64,15 +64,24 @@ export const initSSLCommerzPayment = async (payload: {
 
     const response = await axios.post(`${baseUrl}/gwprocess/v4/api.php`, data, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 15000,
     });
 
     return response.data;
 };
 
-// Official SSLCommerz transaction verification logic
+// Official SSLCommerz transaction verification logic by val_id
 export const validateSSLCommerzPayment = async (val_id: string) => {
     const { storeId, storePass, baseUrl } = getStoreConfig();
-    const url = `${baseUrl}/validator/api/validationserverAPI.php?val_id=${val_id}&store_id=${storeId}&store_passwd=${storePass}&v=1&format=json`;
-    const response = await axios.get(url);
+    const url = `${baseUrl}/validator/api/validationserverAPI.php?val_id=${encodeURIComponent(val_id)}&store_id=${encodeURIComponent(storeId)}&store_passwd=${encodeURIComponent(storePass)}&v=1&format=json`;
+    const response = await axios.get(url, { timeout: 15000 });
+    return response.data;
+};
+
+// Official SSLCommerz transaction verification logic by merchant tran_id
+export const validateSSLCommerzByTranId = async (tran_id: string) => {
+    const { storeId, storePass, baseUrl } = getStoreConfig();
+    const url = `${baseUrl}/validator/api/merchantTransIDvalidationAPI.php?tran_id=${encodeURIComponent(tran_id)}&store_id=${encodeURIComponent(storeId)}&store_passwd=${encodeURIComponent(storePass)}&format=json`;
+    const response = await axios.get(url, { timeout: 15000 });
     return response.data;
 };

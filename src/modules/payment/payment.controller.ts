@@ -21,47 +21,60 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
 
 export const handleWebhook = asyncHandler(async (req: Request, res: Response) => {
     const provider = req.params.provider || 'SSLCOMMERZ';
-    const val_id = req.body?.val_id || req.body?.valId || req.query?.val_id;
-    const tran_id = req.body?.tran_id || req.body?.tranId || req.query?.tran_id;
+    const val_id = (req.body?.val_id || req.body?.valId || req.query?.val_id || req.query?.valId) as string | undefined;
+    const tran_id = (req.body?.tran_id || req.body?.tranId || req.query?.tran_id || req.query?.tranId) as string | undefined;
 
-    if (!val_id || !tran_id) {
-        return sendResponse(res, 400, 'Invalid webhook payload: val_id and tran_id required', false, null, null);
+    if (!val_id && !tran_id) {
+        return sendResponse(res, 400, 'Invalid webhook payload: val_id or tran_id is required', false, null, null);
     }
 
-    const result = await verifyAndFulfillPayment(String(val_id), String(tran_id));
-    return sendResponse(res, 200, `${provider} webhook processed successfully`, true, null, result);
+    try {
+        const result = await verifyAndFulfillPayment(val_id, tran_id);
+        return sendResponse(res, 200, `${provider} webhook processed successfully`, true, null, result);
+    } catch (err: any) {
+        console.error('[SSLCommerz IPN Webhook Error]:', err?.message || err);
+        return sendResponse(res, 400, `Webhook fulfillment error: ${err?.message || 'Processing failed'}`, false, null, null);
+    }
 });
 
 export const handleSuccessRedirect = asyncHandler(async (req: Request, res: Response) => {
-    const val_id = (req.body?.val_id || req.query?.val_id) as string;
-    const tran_id = (req.body?.tran_id || req.query?.tran_id) as string;
+    const val_id = (req.body?.val_id || req.body?.valId || req.query?.val_id || req.query?.valId) as string | undefined;
+    const tran_id = (req.body?.tran_id || req.body?.tranId || req.query?.tran_id || req.query?.tranId) as string | undefined;
     const frontendUrl = getFrontendUrl();
+
     try {
-        if (!val_id || !tran_id) {
-            console.error("Missing val_id or tran_id in SSLCommerz redirect:", { body: req.body, query: req.query });
+        if (!val_id && !tran_id) {
+            console.error('Missing val_id and tran_id in SSLCommerz success redirect:', { body: req.body, query: req.query });
+            const failUrl = process.env.PAYMENT_FAIL_REDIRECT_URL || `${frontendUrl}/recharge?status=failed&error=missing_transaction_id`;
+            return res.redirect(failUrl);
         }
+
         await verifyAndFulfillPayment(val_id, tran_id);
-        return res.redirect(`${frontendUrl}/recharge?status=success`);
-    } catch (error) {
-        console.error("Payment fulfillment error in handleSuccessRedirect:", error);
-        return res.redirect(`${frontendUrl}/recharge?status=failed`);
+        const successUrl = process.env.PAYMENT_SUCCESS_REDIRECT_URL || `${frontendUrl}/recharge?status=success&tran_id=${tran_id || ''}`;
+        return res.redirect(successUrl);
+    } catch (error: any) {
+        console.error('[Payment Error] Payment fulfillment failed in handleSuccessRedirect:', error?.message || error);
+        const failUrl = process.env.PAYMENT_FAIL_REDIRECT_URL || `${frontendUrl}/recharge?status=failed&tran_id=${tran_id || ''}`;
+        return res.redirect(failUrl);
     }
 });
 
 export const handleFailRedirect = asyncHandler(async (req: Request, res: Response) => {
-    const tran_id = (req.body?.tran_id || req.query?.tran_id) as string;
+    const tran_id = (req.body?.tran_id || req.body?.tranId || req.query?.tran_id || req.query?.tranId) as string | undefined;
     if (tran_id) {
         await handlePaymentFailureInDB(tran_id, 'FAILED');
     }
     const frontendUrl = getFrontendUrl();
-    return res.redirect(`${frontendUrl}/recharge?status=failed`);
+    const failUrl = process.env.PAYMENT_FAIL_REDIRECT_URL || `${frontendUrl}/recharge?status=failed&tran_id=${tran_id || ''}`;
+    return res.redirect(failUrl);
 });
 
 export const handleCancelRedirect = asyncHandler(async (req: Request, res: Response) => {
-    const tran_id = (req.body?.tran_id || req.query?.tran_id) as string;
+    const tran_id = (req.body?.tran_id || req.body?.tranId || req.query?.tran_id || req.query?.tranId) as string | undefined;
     if (tran_id) {
         await handlePaymentFailureInDB(tran_id, 'CANCELLED');
     }
     const frontendUrl = getFrontendUrl();
-    return res.redirect(`${frontendUrl}/recharge?status=cancelled`);
+    const cancelUrl = process.env.PAYMENT_CANCEL_REDIRECT_URL || `${frontendUrl}/recharge?status=cancelled&tran_id=${tran_id || ''}`;
+    return res.redirect(cancelUrl);
 });

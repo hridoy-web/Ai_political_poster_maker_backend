@@ -22,7 +22,7 @@ const permissiveCors = cors({ origin: true, credentials: true });
 // Rate limit payment session creation to prevent runaway invoice spamming
 const paymentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15,
+  max: 20,
   message: "Too many payment checkout attempts. Please try again later.",
 });
 
@@ -49,19 +49,24 @@ router.post(
   buyPackageWithWallet
 );
 
-// Webhook endpoints
-router.post("/webhook/:provider", permissiveCors, handleWebhook);
-router.post(
-  "/webhook/sslcommerz",
-  permissiveCors,
-  validateRequest(sslCommerzCallbackSchema),
-  handleWebhook
-);
+// Webhook endpoints & aliases (No Auth, Permissive CORS)
+router.all("/webhook/sslcommerz", permissiveCors, validateRequest(sslCommerzCallbackSchema), handleWebhook);
+router.all("/webhook/:provider", permissiveCors, handleWebhook);
+router.all("/ssl-ipn", permissiveCors, handleWebhook);
+router.all("/ipn", permissiveCors, handleWebhook);
 
-// Gateway redirect endpoints
+// Gateway redirect endpoints & aliases (No Auth, Permissive CORS)
 router.all("/sslcommerz/success", permissiveCors, handleSuccessRedirect);
+router.all("/ssl-success", permissiveCors, handleSuccessRedirect);
+router.all("/success", permissiveCors, handleSuccessRedirect);
+
 router.all("/sslcommerz/fail", permissiveCors, handleFailRedirect);
+router.all("/ssl-fail", permissiveCors, handleFailRedirect);
+router.all("/fail", permissiveCors, handleFailRedirect);
+
 router.all("/sslcommerz/cancel", permissiveCors, handleCancelRedirect);
+router.all("/ssl-cancel", permissiveCors, handleCancelRedirect);
+router.all("/cancel", permissiveCors, handleCancelRedirect);
 
 export const paymentRoutes = router;
 export default router;

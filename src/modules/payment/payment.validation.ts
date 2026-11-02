@@ -11,11 +11,19 @@ export const initiatePaymentSchema = z.object({
 
 export const sslCommerzCallbackSchema = z.object({
   body: z.object({
-    tran_id: z.string().min(1, "Transaction ID is required"),
+    tran_id: z.string().optional(),
+    tranId: z.string().optional(),
     val_id: z.string().optional(),
+    valId: z.string().optional(),
     status: z.string().optional(),
     bank_tran_id: z.string().optional(),
     card_no: z.string().optional(),
     cus_phone: z.string().optional(),
-  }),
+  }).passthrough().optional(),
+  query: z.object({
+    tran_id: z.string().optional(),
+    tranId: z.string().optional(),
+    val_id: z.string().optional(),
+    valId: z.string().optional(),
+  }).passthrough().optional(),
 });

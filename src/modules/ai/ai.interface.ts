@@ -6,6 +6,8 @@ import { AiTaskType } from "@prisma/client";
 export interface ISloganItem {
   slogan: string;
   subText?: string;
+  tone?: string;
+  category?: string;
 }
 
 /**
@@ -48,29 +50,20 @@ export interface IAiTextProvider {
   }>;
 }
 
-/**
- * Authenticated user or guest caller context.
- */
+export interface ICreateAiTaskInput {
+  type: AiTaskType;
+  input: Record<string, unknown>;
+  idempotencyKey?: string;
+}
+
+export interface IRemoveBackgroundInput {
+  imageUrl: string;
+  outputFormat?: "webp" | "png";
+  sourceAssetId?: string;
+  idempotencyKey?: string;
+}
+
 export interface IAuthContext {
   userId?: string;
   guestSessionId?: string;
-  role?: string;
-}
-
-/**
- * Payload for enqueuing asynchronous background AI tasks.
- */
-export interface ICreateAiTaskInput {
-  type: AiTaskType;
-  input: Record<string, any>;
-  idempotencyKey?: string;
-}
-
-/**
- * Payload for enqueuing async background removal tasks.
- */
-export interface IRemoveBackgroundInput {
-  imageUrl: string;
-  outputFormat?: "png" | "webp";
-  idempotencyKey?: string;
 }
