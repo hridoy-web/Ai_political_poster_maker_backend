@@ -70,6 +70,19 @@ const validatePasswordBytes = (password: string): void => {
   }
 };
 
+export const ROLE_PRIORITY: Record<string, number> = {
+  SUPER_ADMIN: 1,
+  ADMIN: 2,
+  TEMPLATE_MANAGER: 3,
+  USER: 4,
+};
+
+export const sortRolesByPriority = (roles: string[]): string[] => {
+  return [...roles].sort(
+    (a, b) => (ROLE_PRIORITY[a] ?? 99) - (ROLE_PRIORITY[b] ?? 99)
+  );
+};
+
 export const hashPassword = (password: string): Promise<string> =>
   bcrypt.hash(password, getSaltRounds());
 
@@ -249,7 +262,9 @@ export const loginUser = async (
   await claimGuestSessionForUser(guestToken, user.id);
 
   const token = generateToken(user.id);
-  const roleNames = user.roles?.map((r) => r.role?.name).filter(Boolean) || [];
+  const rawRoleNames = user.roles?.map((r) => r.role?.name).filter(Boolean) as string[] || [];
+  const roleNames = sortRolesByPriority(rawRoleNames);
+  const primaryRole = roleNames[0] || "USER";
   const permissionKeys =
     user.roles
       ?.flatMap((r) => r.role?.permissions?.map((p) => p.permission?.key))
@@ -269,6 +284,7 @@ export const loginUser = async (
       id: user.id,
       name: user.name,
       email: user.email,
+      role: primaryRole,
       roles: roleNames,
       roleNames,
       permissions: permissionKeys,
@@ -522,7 +538,9 @@ export const googleLoginService = async (
   await claimGuestSessionForUser(guestToken, user.id);
 
   const token = generateToken(user.id);
-  const roleNames = user.roles?.map((r: any) => r.role?.name).filter(Boolean) || ["USER"];
+  const rawRoleNames = user.roles?.map((r: any) => r.role?.name).filter(Boolean) as string[] || ["USER"];
+  const roleNames = sortRolesByPriority(rawRoleNames);
+  const primaryRole = roleNames[0] || "USER";
   const permissionKeys =
     user.roles
       ?.flatMap((r: any) => r.role?.permissions?.map((p: any) => p.permission?.key))
@@ -542,6 +560,7 @@ export const googleLoginService = async (
       id: user.id,
       name: user.name,
       email: user.email,
+      role: primaryRole,
       roles: roleNames,
       roleNames,
       permissions: permissionKeys,

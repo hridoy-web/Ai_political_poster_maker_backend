@@ -78,8 +78,23 @@ class AiService {
     let modelUsed = "";
 
     try {
-      // 4. Primary Provider: Gemini
-      if (this.geminiProvider.isConfigured()) {
+      // 4. Primary Provider: Groq
+      if (this.groqProvider.isConfigured()) {
+        try {
+          const res = await this.groqProvider.generateSlogans(input);
+          slogans = res.slogans;
+          providerUsed = "groq";
+          modelUsed = res.model;
+        } catch (groqErr: any) {
+          console.error(
+            "[AiService] Groq primary provider failed:",
+            groqErr?.message || groqErr
+          );
+        }
+      }
+
+      // 5. Fallback Provider: Gemini
+      if (slogans.length === 0 && this.geminiProvider.isConfigured()) {
         try {
           const res = await this.geminiProvider.generateSlogans(input);
           slogans = res.slogans;
@@ -87,27 +102,16 @@ class AiService {
           modelUsed = res.model;
         } catch (geminiErr: any) {
           console.warn(
-            `[AiService] Primary provider failed: ${geminiErr?.message}. Initiating fallback provider...`
+            "[AiService] Gemini fallback provider failed:",
+            geminiErr?.message || geminiErr
           );
-        }
-      }
-
-      // 5. Fallback Provider: Groq
-      if (slogans.length === 0 && this.groqProvider.isConfigured()) {
-        try {
-          const res = await this.groqProvider.generateSlogans(input);
-          slogans = res.slogans;
-          providerUsed = "groq";
-          modelUsed = res.model;
-        } catch (groqErr: any) {
-          console.warn(`[AiService] Fallback provider Groq failed: ${groqErr?.message}`);
         }
       }
 
       // 6. Resilient Political Domain Fallback
       if (slogans.length === 0) {
         slogans = generateAuthenticFallbackSlogans(input);
-        providerUsed = "gemini"; // default schema compatibility
+        providerUsed = "groq";
         modelUsed = "bangladesh-political-rhymes-v1";
       }
 
@@ -164,8 +168,23 @@ class AiService {
     let providerUsed = "gemini";
     let modelUsed = "unknown";
 
-    // 1. Primary Provider: Gemini
-    if (this.geminiProvider.isConfigured()) {
+    // 1. Primary Provider: Groq
+    if (this.groqProvider.isConfigured()) {
+      try {
+        const res = await this.groqProvider.generateSlogans(input);
+        slogans = res.slogans;
+        providerUsed = "groq";
+        modelUsed = res.model;
+      } catch (groqErr: any) {
+        console.error(
+          `[AiService] Task ${taskId} Groq failed:`,
+          groqErr?.message || groqErr
+        );
+      }
+    }
+
+    // 2. Fallback Provider: Gemini
+    if (slogans.length === 0 && this.geminiProvider.isConfigured()) {
       try {
         const res = await this.geminiProvider.generateSlogans(input);
         slogans = res.slogans;
@@ -173,27 +192,16 @@ class AiService {
         modelUsed = res.model;
       } catch (geminiErr: any) {
         console.warn(
-          `[AiService] Primary provider failed for task ${taskId}: ${geminiErr?.message}. Initiating fallback provider...`
+          `[AiService] Task ${taskId} Gemini failed:`,
+          geminiErr?.message || geminiErr
         );
-      }
-    }
-
-    // 2. Fallback Provider: Groq
-    if (slogans.length === 0 && this.groqProvider.isConfigured()) {
-      try {
-        const res = await this.groqProvider.generateSlogans(input);
-        slogans = res.slogans;
-        providerUsed = "groq";
-        modelUsed = res.model;
-      } catch (groqErr: any) {
-        console.warn(`[AiService] Task ${taskId} Groq failed: ${groqErr?.message}`);
       }
     }
 
     // 3. Resilient Political Domain Fallback
     if (slogans.length === 0) {
       slogans = generateAuthenticFallbackSlogans(input);
-      providerUsed = "gemini";
+      providerUsed = "groq";
       modelUsed = "bangladesh-political-rhymes-v1";
     }
 

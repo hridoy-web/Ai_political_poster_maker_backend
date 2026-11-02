@@ -118,7 +118,8 @@ async function main() {
         }
       }
 
-      const targetEmail = "itzsharmin07@gmail.com".toLowerCase();
+      const targetEmails = ["itzsharmin07@gmail.com".toLowerCase(), "superadmin@posterai.com".toLowerCase()];
+      for (const targetEmail of targetEmails) {
       const user = await tx.user.findUnique({
         where: { email: targetEmail },
         select: { id: true },
@@ -148,6 +149,7 @@ async function main() {
         }
       } else {
         console.log(`User ${targetEmail} not found, skipped role assignment`);
+    }
       }
     },
     {

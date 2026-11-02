@@ -12,6 +12,7 @@
     "seed:packages": "tsx --env-file=.env src/seed/seedPackages.ts",
     "seed:templates": "tsx --env-file=.env src/seed/templates.seed.ts",
     "seed:users": "tsx --env-file=.env src/seed/seedUsers.ts",
+    "seed:analytics": "tsx --env-file=.env src/seed/seedAnalyticsData.ts",
     "postinstall": "prisma generate"
   },
   "keywords": [],

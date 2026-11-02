@@ -45,7 +45,7 @@ const BANGLADESH_PARTY_RHYMES = `
  * Builds a prompt strictly enforcing authentic, 2-line rhyming couplets for Bangladeshi political posters.
  */
 export function buildSloganPrompt(input: IGenerateSlogansInput): string {
-  const count = input.count ?? 3;
+  const count = input.count ?? 4;
   const candidateName = input.candidateName ? input.candidateName.trim() : "জননেতা";
   const area = input.area ? input.area.trim() : "এলাকা";
   const party = input.partyOrIdeology ? input.partyOrIdeology.trim() : "স্বতন্ত্র / সর্বদলীয়";
@@ -67,40 +67,22 @@ ${BANGLADESH_PARTY_RHYMES}
 
 কঠোর ক্রমবিন্যাস ও অন্ত্যমিলের নিয়মাবলি (বাধ্যতামূলক):
 ১. প্রতিটি স্লোগান হবে ঠিক দুই লাইনের খাঁটি ছন্দময় অন্ত্যমিল (2-line rhyming couplet)।
-২. লাইনের শেষের শব্দগুলোর মধ্যে অবশ্যই খাঁটি ধ্বনিসাম্য অন্ত্যমিল থাকতে হবে। যেমন:
-   - আলো / ভালো
-   - চাই / পাই
-   - চাও / দাও
-   - ভোট / হোক
-   - শীষে / মিলেমিশে
-   - হাসি / ভালোবাসি
-   - লক্ষ্য / যোগ্য
-   - সঠিক / প্রতীক
-   - ডাক / থাক
-   - কথা / সততা
-৩. বেমানান বা ছন্দহীন শব্দ কঠোরভাবে নিষিদ্ধ (STRICT NEGATIVE CONSTRAINTS):
-   - কোনো অবস্থাতেই লাইনের শেষে বেমানান শব্দ বা ছন্দহীন ক্রিয়াপদ (যেমন: "করুন", "রাখুন", "দিন", "আসুন", "চলুন", "যাবেন") দিয়ে ছন্দ ছাড়া বাক্য শেষ করা যাবে না।
-   - কৃত্রিম বা জোরপূর্বক অমিল (যেমন: "সেবা/নেতা", "উন্নয়ন/জনগণ", "কথা/নেতা") দেওয়া সম্পূর্ণ নিষিদ্ধ।
-   - দুটি চরণের শেষ শব্দের ধ্বনি ও স্বরবর্ণ ১০০% মিলতে হবে, যাতে স্লোগানটি মানুষের মুখে মুখে ছড়ার মতো সুর করে বলা যায়।
+২. লাইনের শেষের শব্দগুলোর মধ্যে অবশ্যই খাঁটি ধ্বনিসাম্য অন্ত্যমিল থাকতে হবে (যেমন: আলো/ভালো, চাই/পাই, চাও/দাও, ভোট/হোক, শীষে/মিলেমিশে)।
+৩. বেমানান বা ছন্দহীন শব্দ কঠোরভাবে নিষিদ্ধ (যেমন: করুন, রাখুন, দিন, আসুন, চলুন দিয়ে ছন্দ ছাড়া বাক্য শেষ করা যাবে না)।
+৪. স্লোগানের সুনির্দিষ্ট ক্রমবিন্যাস:
+   - স্লোগান #১: দলের ঐতিহ্যবাহী ও সর্বজনস্বীকৃত মূল স্লোগান।
+   - স্লোগান #২: প্রার্থীর নাম ("${candidateName}") ও এলাকা ("${area}") সম্বলিত ছন্দ।
+   - স্লোগান #৩ ও পরবর্তী: সততা, সুশাসন, উন্নয়ন বা তারুণ্যের অঙ্গীকার নিয়ে তৈরি নতুন ছন্দময় স্লোগান।
+৫. প্রতিটি স্লোগানের জন্য 'subText' (১ লাইনের সহায়ক বার্তা), 'category' (ক্যাটাগরি) এবং 'tone' (মেজাজ, যেমন: আশাবাদী, দেশপ্রেম, ঐক্য, তেজস্বী) প্রদান করো।
 
-৪. স্লোগানের সুনির্দিষ্ট ক্রমবিন্যাস ও বৈচিত্র্য (ORDER & CATEGORIES - অত্যন্ত গুরুত্বপূর্ণ):
-   - স্লোগান #১ (দলের ঐতিহ্যবাহী ও সর্বজনস্বীকৃত মূল স্লোগান): 
-     প্রার্থী যে দলের (বা ভাবধারার), ১ নম্বর স্লোগানে অবশ্যই সেই দলের সর্বাধিক জনপ্রিয়, পরিচিত ও ঐতিহাসিক মূল স্লোগানটি দেবে (যেমন: বিএনপি হলে "ভোট দিলে ধানের শীষে, / দেশ গড়বো মিলেমিশে।", জামায়াত হলে "ইনসাফ যদি পেতে চাও, / দাঁড়িপাল্লায় ভোট দাও।", এনসিপি হলে "রক্তে কেনা নতুন ভোরে, / বৈষম্যহীন দেশ গড়ে।", জাপা হলে "লাঙ্গল মার্কায় দিলে ভোট, / শান্তি পাবে দেশের লোক।", স্বতন্ত্র হলে "দলমত নির্বিশেষে, / সৎ প্রার্থীর পক্ষে আসুন মিলেমিশে।")।
-   
-   - স্লোগান #২ (প্রার্থীর নাম ও এলাকার নাম দিয়ে তৈরি খাঁটি ছন্দ):
-     প্রার্থীর নাম ("${candidateName}") এবং নির্বাচনী এলাকা ("${area}") সুন্দরভাবে ছন্দে মিলিয়ে তৈরি করবে (যেমন: "এলাকার সন্তান ${candidateName} ভাই, / ধানের শীষে ভোট চাই।")।
-   
-   - স্লোগান #৩ ও পরবর্তী (সততা, সুশাসন, উন্নয়ন বা তারুণ্যের ছন্দ):
-     উদ্দেশ্য বা বিষয় ("${input.topic}"), সততা, তারুণ্য, নাগরিক অধিকার বা এলাকার সার্বিক উন্নয়নের অঙ্গীকার নিয়ে তৈরি নতুন ছন্দময় স্লোগান দেবে।
-
-৫. প্রতিটি স্লোগানের সাথে ১ লাইনের একটি সহায়ক সাব-টেক্সট (subText) দাও, যা পোস্টারের নিচের ছোট বডি টেক্সটে প্রার্থীর পক্ষে দোয়া ও ভোট চাওয়ার লাইন হিসেবে বসবে।
-
-আউটপুট ফরম্যাট (শুধুমাত্র ক্লিন JSON দাও, কোনো বাড়তি টেক্সট বা ব্যাকটিক্স ছাড়া):
+আউটপুট ফরম্যাট (শুধুমাত্র ভ্যালিড JSON প্রদান করো):
 {
   "slogans": [
     {
       "slogan": "প্রথম চরণ, / দ্বিতীয় চরণ।",
-      "subText": "আসন্ন নির্বাচনে আপনার মূল্যবান ভোট ও দোয়া প্রার্থনা করছি।"
+      "subText": "আসন্ন নির্বাচনে আপনার মূল্যবান ভোট ও দোয়া প্রার্থনা করছি।",
+      "category": "দলীয় ঐতিহ্য",
+      "tone": "ঐক্য ও সংহতি"
     }
   ]
 }
@@ -108,15 +90,29 @@ ${BANGLADESH_PARTY_RHYMES}
 }
 
 /**
- * Safely parses LLM JSON output and extracts clean slogan and subText.
+ * Safely parses LLM JSON output, sanitizing markdown code fences and extraneous text.
  */
 export function parseSlogansJson(rawText: string): ISloganItem[] {
   try {
-    let clean = rawText.trim();
-    if (clean.startsWith("```json")) {
-      clean = clean.replace(/^```json\s*/i, "").replace(/\s*```$/, "");
-    } else if (clean.startsWith("```")) {
-      clean = clean.replace(/^```\s*/, "").replace(/\s*```$/, "");
+    let clean = (rawText || "").trim();
+
+    // 1. Remove markdown code blocks if wrapped
+    const markdownMatch = clean.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (markdownMatch && markdownMatch[1]) {
+      clean = markdownMatch[1].trim();
+    }
+
+    // 2. Extract outermost JSON object if preamble or trailer text exists
+    const firstBrace = clean.indexOf("{");
+    const lastBrace = clean.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      clean = clean.substring(firstBrace, lastBrace + 1);
+    } else {
+      const firstBracket = clean.indexOf("[");
+      const lastBracket = clean.lastIndexOf("]");
+      if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+        clean = clean.substring(firstBracket, lastBracket + 1);
+      }
     }
 
     const parsed = JSON.parse(clean);
@@ -140,10 +136,14 @@ export function parseSlogansJson(rawText: string): ISloganItem[] {
         }
 
         const subText = item.subText ? String(item.subText).trim() : undefined;
+        const tone = item.tone ? String(item.tone).trim() : "উদ্যমী";
+        const category = item.category ? String(item.category).trim() : "নির্বাচনী";
 
         return {
           slogan,
           subText,
+          tone,
+          category,
         };
       })
       .filter((item: ISloganItem) => item.slogan.length > 0);
@@ -171,63 +171,91 @@ export function generateAuthenticFallbackSlogans(input: IGenerateSlogansInput): 
     results.push({
       slogan: "ভোট দিলে ধানের শীষে, / দেশ গড়বো মিলেমিশে।",
       subText: `${area} এলাকার সার্বিক উন্নয়ন ও গণতন্ত্র প্রতিষ্ঠায় আপনার সমর্থন চাই।`,
+      category: "ঐতিহাসিক মূল স্লোগান",
+      tone: "ঐক্য ও সংহতি",
     });
     results.push({
       slogan: `এলাকার সন্তান ${candidate} ভাই, / ধানের শীষে ভোট চাই।`,
       subText: `আসন্ন নির্বাচনে ${candidate} ভাইকে ধানের শীষ মার্কায় বিজয়ী করুন।`,
+      category: "প্রার্থী পরিচিতি",
+      tone: "জনবান্ধব",
     });
     results.push({
       slogan: "তারুণ্যের প্রথম ভোট, / ধানের শীষের পক্ষে হোক।",
       subText: "দেশনেত্রী ও তরুণ প্রজন্মের স্বপ্নপূরণে ঐক্যবদ্ধ হোন।",
+      category: "তারুণ্যের আহ্বান",
+      tone: "উদ্যমী",
     });
   } else if (party.includes("জামায়াত") || party.includes("jamaat") || party.includes("দাঁড়িপাল্লা")) {
     results.push({
       slogan: "ইনসাফ যদি পেতে চাও, / দাঁড়িপাল্লায় ভোট দাও।",
       subText: "দুর্নীতিমুক্ত সমাজ ও ন্যায়বিচার প্রতিষ্ঠায় দাঁড়িপাল্লা মার্কায় ভোট দিন।",
+      category: "ঐতিহাসিক মূল স্লোগান",
+      tone: "ইনসাফ ও ন্যায়বিচার",
     });
     results.push({
       slogan: `এলাকার বুকে ইনসাফের আলো, / ${candidate} ভাই মানুষ ভালো।`,
       subText: `সৎ ও যোগ্য নেতৃত্ব গঠনে ${candidate} ভাইকে জয়যুক্ত করুন।`,
+      category: "প্রার্থী পরিচিতি",
+      tone: "সততা ও নিষ্ঠা",
     });
     results.push({
       slogan: "সৎ মানুষের শাসন চাই, / ইনসাফের সমাজ পাই।",
       subText: `${area}বাসীর নাগরিক অধিকার আদায়ে ঐক্যবদ্ধ সংগ্রাম।`,
+      category: "সুশাসন",
+      tone: "দৃঢ়চেতা",
     });
   } else if (party.includes("নাগরিক") || party.includes("ncp") || party.includes("ছাত্র") || party.includes("বৈষম্য")) {
     results.push({
       slogan: "রক্তে কেনা নতুন ভোরে, / বৈষম্যহীন দেশ গড়ে।",
       subText: "২৪-এর বিপ্লবের আকাঙ্ক্ষা বাস্তবায়নে নতুন বাংলাদেশ বিনির্মাণে এগিয়ে আসুন।",
+      category: "ঐতিহাসিক মূল স্লোগান",
+      tone: "বিপ্লবী ও আশাবাদী",
     });
     results.push({
       slogan: `তারুণ্যের শক্তিতে ${candidate} ভাই, / সংস্কারের নতুন দেশ বানাই।`,
       subText: `${area} আসনে মেধা ও তারুণ্যের প্রতীক ${candidate} ভাইয়ের পক্ষে ভোট দিন।`,
+      category: "সংস্কার ও নতুন রাজনীতি",
+      tone: "দেশপ্রেম",
     });
     results.push({
       slogan: "আমার সোনার বাংলায়, / বৈষম্যের ঠাঁই নাই।",
       subText: "নাগরিক অধিকার ও সুশাসন প্রতিষ্ঠায় তারুণ্যের অঙ্গীকার।",
+      category: "নাগরিক অধিকার",
+      tone: "দৃঢ়চেতা",
     });
   } else if (party.includes("জাপা") || party.includes("জাতীয় পার্টি") || party.includes("লাঙ্গল")) {
     results.push({
       slogan: "লাঙ্গল মার্কায় দিলে ভোট, / শান্তি পাবে দেশের লোক।",
       subText: "পল্লীবন্ধুর স্বপ্ন পূরণ ও গ্রামীণ উন্নয়নে লাঙ্গল প্রতীকে ভোট দিন।",
+      category: "ঐতিহাসিক মূল স্লোগান",
+      tone: "শান্তি ও উন্নয়ন",
     });
     results.push({
       slogan: `এলাকার সার্বিক উন্নয়নে ${candidate} ভাই, / লাঙ্গল প্রতীকে ভোট চাই।`,
       subText: `${area}বাসীর অকৃত্রিম বন্ধু ${candidate} ভাইকে নির্বাচিত করুন।`,
+      category: "প্রার্থী পরিচিতি",
+      tone: "জনবান্ধব",
     });
   } else {
     // Independent / Universal Good Governance
     results.push({
       slogan: "দলমত নির্বিশেষে, / সৎ প্রার্থীর পক্ষে আসুন মিলেমিশে।",
       subText: `${area} এলাকার সার্বিক উন্নয়ন ও পরিবর্তনের প্রত্যয়ে ভোট দিন।`,
+      category: "ঐতিহাসিক মূল স্লোগান",
+      tone: "ঐক্য ও সম্প্রীতি",
     });
     results.push({
       slogan: `সততা আর নিষ্ঠার প্রতীক, / ${candidate} ভাই প্রার্থী সঠিক।`,
       subText: `সৎ ও জনবান্ধব জনপ্রতিনিধি হিসেবে ${candidate} ভাইকে বিজয়ী করুন।`,
+      category: "সততা ও সত্যান্বেষণ",
+      tone: "সততা ও নিষ্ঠা",
     });
     results.push({
       slogan: "মার্কা যার যার, / সৎ প্রার্থী সবার।",
       subText: "যোগ্য ও কর্মঠ নেতৃত্বকে নির্বাচিত করে উন্নয়নের ধারা বেগবান করুন।",
+      category: "যোগ্য নেতৃত্ব",
+      tone: "সুশাসন",
     });
   }
 
@@ -236,19 +264,31 @@ export function generateAuthenticFallbackSlogans(input: IGenerateSlogansInput): 
     results.push({
       slogan: "তারুণ্যের শক্তি আর মেধার বলে, / আধুনিক সমাজ গড়বো সকলে।",
       subText: "যুবসমাজের কর্মসংস্থান ও মেধাভিত্তিক নতুন প্রজন্ম বিনির্মাণে পাশে থাকুন।",
+      category: "তারুণ্যের অঙ্গীকার",
+      tone: "উদ্যমী ও উদ্দীপনামূলক",
     });
   } else if (topic.includes("উন্নয়ন") || topic.includes("অবকাঠামো")) {
     results.push({
-      slogan: "কথায় নয় কাজে বিশ্বাসী, / উন্নয়ন করবো দিবানিশি।",
-      subText: `${area} এলাকার রাস্তাঘাট ও নাগরিক সুযোগ-সুবিধা নিশ্চিতের অঙ্গীকার।`,
+      slogan: "উন্নয়নের ধারাবাহিকতায়, / জনগণের পাশে সবসময়।",
+      subText: `${area} এলাকার রাস্তাঘাট, শিক্ষা ও স্বাস্থ্যসেবার আধুনিক রূপান্তরে শরিক হোন।`,
+      category: "উন্নয়ন ও অবকাঠামো",
+      tone: "প্রতিশ্রুতিশীল",
+    });
+  } else if (topic.includes("শিক্ষা") || topic.includes("স্বাস্থ্য")) {
+    results.push({
+      slogan: "শিক্ষিত জাতি আর সুস্বাস্থ্য যেখানে, / সমৃদ্ধ সমাজ গড়ে উঠবে সেখানে।",
+      subText: "সবার জন্য মানসম্মত শিক্ষা ও স্বাস্থ্যসেবা নিশ্চিত করতে আপনার রায় দিন।",
+      category: "শিক্ষা ও স্বাস্থ্য",
+      tone: "দূরদর্শী",
     });
   } else {
     results.push({
-      slogan: `জনগণের পাশে ${candidate} ভাই, / এলাকার শান্তি ও সমৃদ্ধি চাই।`,
-      subText: `${area}বাসীর ভালোবাসা ও দোয়ায় আমাদের পথচলা।`,
+      slogan: "জনগণের সেবায় নিবেদিতপ্রাণ, / এলাকার উন্নয়ন আমাদের সম্মান।",
+      subText: "ন্যায্যতা ও নাগরিক অধিকার প্রতিষ্ঠায় সত্যের পথে অবিচল নেতৃত্ব।",
+      category: "জনকল্যাণ",
+      tone: "বিশ্বস্ত",
     });
   }
 
   return results.slice(0, count);
 }
-

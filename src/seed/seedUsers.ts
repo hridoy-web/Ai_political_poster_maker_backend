@@ -5,11 +5,18 @@ interface TargetAccount {
   name: string;
   email: string;
   passwordRaw: string;
-  roleName: "ADMIN" | "TEMPLATE_MANAGER";
+  roleName: "SUPER_ADMIN" | "ADMIN" | "TEMPLATE_MANAGER";
   roleDescription: string;
 }
 
 const TARGET_ACCOUNTS: TargetAccount[] = [
+  {
+    name: "Super Admin",
+    email: "superadmin@posterai.com",
+    passwordRaw: "Password123!",
+    roleName: "SUPER_ADMIN",
+    roleDescription: "Manage all system permissions and settings",
+  },
   {
     name: "Admin User",
     email: "testadmin@posterai.com",
@@ -77,6 +84,22 @@ async function seedTargetUsers() {
         roleId: role.id,
       },
     });
+
+    // Clean up basic USER role if account is elevated to SUPER_ADMIN or ADMIN
+    if (acc.roleName === "SUPER_ADMIN" || acc.roleName === "ADMIN") {
+      const userRole = await prisma.role.findUnique({
+        where: { name: "USER" },
+        select: { id: true },
+      });
+      if (userRole) {
+        await prisma.userRole.deleteMany({
+          where: {
+            userId: user.id,
+            roleId: userRole.id,
+          },
+        });
+      }
+    }
 
     // 5. Initialize starter credit wallet if uninitialized
     await prisma.creditWallet.upsert({
