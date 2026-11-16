@@ -65,3 +65,7 @@ docs/
 config.bat
 
 # Environment variables & secrets (added by GitHub Guardian)
+
+# Environment variables & secrets (added by GitHub Guardian)
+.env
+.env.*
